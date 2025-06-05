@@ -7,3 +7,6 @@ export const MODELS_ENDPOINT = `${BASE_URL}/api/engine/models`; // Endpoint for 
 export const RUN_FORECAST_ENDPOINT = `${BASE_URL}/api/engine/run-forecast`; // Endpoint for running forecasts
 export const DASHBOARD_ENDPOINT = `${BASE_URL}/api/engine/dashboard-data`; // Endpoint for dashboard
 export const PLANNERWB_ENDPOINT = `${BASE_URL}/api/engine/planner-data`; // Endpoint for Planner-Workbench
+
+
+// export const BASE_URL = 'https://4kast-backend-v2.cfapps.eu10-005.hana.ondemand.com';  Base URL for the server
