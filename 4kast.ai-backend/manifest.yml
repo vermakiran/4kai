@@ -1,0 +1,16 @@
+applications:
+  - name: 4kast-backend-v2 
+    disk_quota: 8G        
+    docker:
+      image: kiranv07/4kast-backend:latest 
+    memory: 8G            
+    default_route: true   
+
+    env: 
+      HANA_HOST: "c4ef27e2-34ad-4c82-96d7-2f8bd2360251.hna2.prod-eu10.hanacloud.ondemand.com"
+      HANA_PORT: "443"         
+      HANA_USER: "DBADMIN"
+      HANA_PASS: "Stellium@123" 
+      HANA_SCHEMA: "DBADMIN"
+      JWT_SECRET: "iihhyenHvJhBj86gVuNvYvNvshghjvcbs" 
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"

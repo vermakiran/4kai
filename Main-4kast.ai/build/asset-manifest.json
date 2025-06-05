@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/static/css/main.299b7221.css",
+    "main.js": "/static/js/main.88683865.js",
+    "static/js/453.e8d585f7.chunk.js": "/static/js/453.e8d585f7.chunk.js",
+    "static/media/Data analysis concept illustration (1).jpeg": "/static/media/Data analysis concept illustration (1).b2b114993ab977844745.jpeg",
+    "index.html": "/index.html",
+    "main.299b7221.css.map": "/static/css/main.299b7221.css.map",
+    "main.88683865.js.map": "/static/js/main.88683865.js.map",
+    "453.e8d585f7.chunk.js.map": "/static/js/453.e8d585f7.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.299b7221.css",
+    "static/js/main.88683865.js"
+  ]
+}
