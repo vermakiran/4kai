@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
-import Chart from "chart.js/auto";
+import React, { useState, useEffect } from "react";
 import moment from 'moment';
 import { useAuth } from '../AuthContext';
 import { PLANNERWB_ENDPOINT } from "./config"; 
@@ -13,6 +12,7 @@ function aggregateTableData(tableData, timeBucket) {
   else if (timeBucket === "Yearly") groupFormat = "YYYY";
 
   const agg = {};
+
   tableData.forEach(row => {
     const groupKey = moment(row.date).format(groupFormat);
     const { store, product } = row;
@@ -24,17 +24,21 @@ function aggregateTableData(tableData, timeBucket) {
         product,
         date: groupKey,
         actual_quantity: 0,
-        forecast_quantity: 0,
+        forecast_quantity:  0,
         MANUALDEMAND: 0,
         final_qty: 0,
         count: 0
       };
     }
+
     agg[key].actual_quantity += Number(row.actual_quantity) || 0;
     agg[key].forecast_quantity += Number(row.forecast_quantity) || 0;
     agg[key].MANUALDEMAND += Number(row.MANUALDEMAND) || 0;
-    agg[key].final_qty += Number(row.final_qty) || 0;
     agg[key].count += 1;
+
+  });
+  Object.values(agg).forEach(group => {
+    group.final_qty = group.MANUALDEMAND;
   });
 
   return Object.values(agg);
@@ -100,11 +104,23 @@ useEffect(() => {
       return res.json();
     })
     .then(json => {
-      setTableData(json.data || []);
+
+      const normalizedData = (json.data || []).map(row => ({
+        ...row,
+        MANUALDEMAND: row.MANUALDEMAND !== undefined
+        ? row.MANUALDEMAND
+        : row.manual_forecast !== undefined
+          ? row.manual_forecast
+          : undefined
+      }));
+
+      console.log("Normalized planner data:", normalizedData);
+
+      setTableData(normalizedData);
       // Derive unique product/store lists from API result
-      if (json.data) {
-        const products = [...new Set(json.data.map(row => row.product))].sort();
-        const stores = [...new Set(json.data.map(row => row.store))].sort();
+      if (normalizedData.length) {
+        const products = [...new Set(normalizedData.map(row => row.product))].sort();
+        const stores = [...new Set(normalizedData.map(row => row.store))].sort();
         setProducts(products);
         setStores(stores);
       }
@@ -153,8 +169,6 @@ const allDates = filteredTableData
     setShowSaveDialog(true);
   };
 
-
-
   const handleSaveCancel = () => {
     setShowSaveDialog(false);
     setSaveReason("");
@@ -162,7 +176,6 @@ const allDates = filteredTableData
   };
 
   const handleSaveConfirm = async () => {
-    debugger;
   try {
     const token = Cookies.get("authToken");
     const updates = Object.values(editedCells).map(edit => ({
@@ -184,21 +197,24 @@ const allDates = filteredTableData
       throw new Error("Failed to update forecast in backend");
     }
 
-    const newTableData = tableData.map(row => {
-      const key = `${row.store}||${row.product}||${row.date}`;
-      if (editedCells[key]) {
-        return {
-          ...row,
-          MANUALDEMAND: editedCells[key].MANUALDEMAND,
-          final_qty:
-            editedCells[key].MANUALDEMAND != null
-              ? editedCells[key].MANUALDEMAND
-              : row.forecast_quantity || row.predicted_demand || 0,
-        };
+    const fresh = await fetch(`${PLANNERWB_ENDPOINT}`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
       }
-      return row;
     });
-    setTableData(newTableData);
+
+    const freshJson = await fresh.json();
+    const normalizedData = (freshJson.data || []).map(row => ({
+      ...row,
+      MANUALDEMAND: row.MANUALDEMAND !== undefined
+        ? row.MANUALDEMAND
+        : row.manual_forecast !== undefined
+          ? row.manual_forecast
+          : undefined
+    }));
+
+    setTableData(normalizedData);
 
     // 4. Clean up edit state and dialog
     setEditedCells({});
@@ -210,9 +226,6 @@ const allDates = filteredTableData
     alert(error.message);
   }
 };
-
-
-  
 
   const handleRefresh = () => {
     setTableData(null); // Optional: Show loading UI

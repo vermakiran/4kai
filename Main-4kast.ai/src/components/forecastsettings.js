@@ -1699,7 +1699,7 @@ const ForecastSettings = () => {
                             if (parts.length === 2) {
                               displayName = `Store: ${parts[0]}, Item: ${parts[1]}`;
                             }
-                          }
+                          }                        
                           
                           return (
                             <option key={comboId} value={comboId}>{displayName}</option>

@@ -21,8 +21,6 @@ from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from sklearn.gaussian_process import GaussianProcessRegressor
 from urllib.parse import unquote
 import os
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
 import io
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -3432,6 +3430,7 @@ async def get_planner_data(
                 FROM DBADMIN.FORECASTDATA
                 WHERE {where_clause}
                 ORDER BY STOREID, PRODUCTID, FORECASTDATE
+                
             """, params)
             
             rows = cur.fetchall()
@@ -3439,12 +3438,7 @@ async def get_planner_data(
             for row in rows:
                 store, product, date, actual, forecast, manual = row
                 # Demand Planning Final Qty Logic
-                if manual is not None:
-                    final_qty = (manual or 0) + (forecast or 0)
-                elif forecast is not None:
-                    final_qty = forecast
-                else:
-                    final_qty = ""
+                final_qty = manual or 0
                 result.append({
                     "store": store,
                     "product": product,
