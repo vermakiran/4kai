@@ -7,22 +7,51 @@ import "../App.css";
 
 // Add custom CSS for forecast displays
 const customStyles = `
-  .future-forecasts table, .imported-data-table table, .model-results table {
+  /* Table Container Styles */
+  .table-container {
     width: 100%;
-    border-collapse: collapse;
+    max-width: 100%;
+    overflow-x: auto;
     margin-bottom: 20px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  }
+
+  /* Common Table Styles */
+  .future-forecasts table, 
+  .imported-data-table table, 
+  .model-results table {
+    width: 100%;
+    min-width: 650px; /* Minimum width to ensure readability */
+    border-collapse: collapse;
+    margin-bottom: 0; /* Remove bottom margin as container has margin */
     font-size: 14px;
     font-family: Arial, sans-serif;
+  }
+  
+  /* Wrap all tables in a container */
+  .future-forecasts,
+  .imported-data-table,
+  .model-results {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 1px; /* Prevent margin collapse */
   }
   
   .future-forecasts th, .future-forecasts td,
   .imported-data-table th, .imported-data-table td,
   .model-results th, .model-results td {
     border: 1px solid #d4d4d4;
-    padding: 6px 8px;
+    padding: 8px 12px;
     height: 21px;
-    min-width: 96px;
-    max-width: 200px;
+    min-width: 100px; /* Minimum width for columns */
+    max-width: 300px; /* Maximum width for columns */
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
@@ -32,47 +61,35 @@ const customStyles = `
   
   .future-forecasts th, .imported-data-table th, .model-results th {
     background-color: #f8f9fa;
-    font-weight: normal;
+    font-weight: 600;
     color: #000000;
-    height: 20px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
     border-bottom: 2px solid #d4d4d4;
   }
-  
-  .future-forecasts tr:hover td, .imported-data-table tr:hover td, .model-results tr:hover td {
-    background-color: #f5f5f5;
-  }
-  
-  .future-forecasts td:hover, .imported-data-table td:hover, .model-results td:hover {
-    background-color: #e8e8e8;
-  }
-  
-  .future-forecasts input, .imported-data-table input, .model-results input {
+
+  /* Ensure the forecast container doesn't overflow */
+  .forecast-container {
     width: 100%;
-    height: 20px;
-    border: none;
-    padding: 2px 4px;
-    font-size: 14px;
-    font-family: Arial, sans-serif;
-    background: transparent;
-  }
-  
-  .future-forecasts input:focus, .imported-data-table input:focus, .model-results input:focus {
-    outline: 2px solid #1a73e8;
-    background: #ffffff;
-  }
-  
-  /* Add scrolling for wide tables */
-  .table-container {
-    overflow-x: auto;
     max-width: 100%;
+    overflow-x: hidden;
+    padding: 20px;
+    box-sizing: border-box;
   }
-  
-  /* Excel-like selection styling */
-  .selected-cell {
-    outline: 2px solid #1a73e8;
-    outline-offset: -2px;
+
+  /* Make sure item and combo forecasts don't overflow */
+  .item-forecast,
+  .combo-forecast {
+    width: 100%;
+    overflow-x: auto;
+    margin-bottom: 30px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background-color: white;
   }
-  
+
   /* Rest of your existing styles... */
   .item-selector, .combination-selector {
     margin-bottom: 15px;
@@ -83,14 +100,6 @@ const customStyles = `
     border-radius: 4px;
     border: 1px solid #ccc;
     min-width: 250px;
-  }
-  
-  .item-forecast, .combo-forecast {
-    margin-bottom: 30px;
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: white;
   }
   
   .unknown-forecast-type {
@@ -159,6 +168,98 @@ const customStyles = `
     color: #333;
     margin: 0;
   }
+
+  /* Preview Table Specific Styles */
+  .preview-table-container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 20px 0;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+  }
+
+  .preview-table-container table {
+    width: auto; /* Allow table to take necessary width */
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: Arial, sans-serif;
+    white-space: nowrap;
+  }
+
+  .preview-table-container th,
+  .preview-table-container td {
+    padding: 4px 6px;
+    border: 1px solid #e0e0e0;
+    text-align: left;
+    height: 20px;
+    line-height: 20px;
+    min-width: 100px; /* Minimum width for columns */
+    background-color: #ffffff;
+  }
+
+  /* Ensure text is visible in cells */
+  .preview-table-container td {
+    white-space: nowrap;
+    overflow: visible; /* Make content visible */
+    text-overflow: clip;
+    max-width: none; /* Remove max-width constraint */
+  }
+
+  .preview-table-container th {
+    background-color: #f3f3f3;
+    font-weight: normal;
+    color: #000000;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    border-bottom: 2px solid #d4d4d4;
+    height: 22px;
+    line-height: 22px;
+    white-space: nowrap;
+    overflow: visible; /* Make header text visible */
+  }
+
+  .preview-table-container tr:nth-child(even) {
+    background-color: #fafafa;
+  }
+
+  .preview-table-container tr:hover td {
+    background-color: #f0f7ff;
+  }
+
+  /* Scrollbar styling for better visibility */
+  .preview-table-container::-webkit-scrollbar {
+    height: 8px;
+    width: 8px;
+  }
+
+  .preview-table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  .preview-table-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+
+  .preview-table-container::-webkit-scrollbar-thumb:hover {
+    background: #666;
+  }
+
+  /* Container for the entire preview section */
+  .imported-data-table {
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden; /* Prevent outer container overflow */
+    padding: 0 1px; /* Prevent scrollbar from causing page overflow */
+  }
+
+  /* Rest of your existing styles... */
 `;
 
 // Helper function to generate future dates from current date
@@ -278,20 +379,17 @@ const ForecastSettings = () => {
    const getAuthToken = useCallback(() => {
      const token = Cookies.get("authToken");
      if (!token) {
-       console.error("Auth Token not found");
-       showAlert("Please log in to continue.", "error");
+       showAlert("Authentication token not found. Please log in to continue.", "error");
        return null;
      }
-    //  console.log("Retrieved Token:", token);  // Debugging line
      return token;
-   }, []);  // No dependencies since it's a simple getter
+   }, []);
 
     const fetchFiles = async () => {
       try {
-        // Get the token from cookies
         const token = getAuthToken();
         if (!token) {
-          console.error("No auth token found, stopping fetch.");
+          showAlert("No authentication token found. Please log in to continue.", "error");
           return;
         }
         const response = await fetch(`${BASE_URL}/api/engine/files`, {
@@ -306,11 +404,9 @@ const ForecastSettings = () => {
           throw new Error(`Failed to fetch file list: ${response.status} - ${errorText}`);
         }
         const data = await response.json();
-        // console.log(data); // Debugging line
         setUploadedDatasets(data.files || []);
       } catch (error) {
-        console.error("Error fetching files:", error);
-        showAlert("Error fetching files. Please try again.", "error");
+        showAlert(`Error fetching files: ${error.message}`, "error");
       }
     };
 
@@ -323,7 +419,7 @@ const ForecastSettings = () => {
       try {
         const token = getAuthToken();
         if (!token) {
-          console.error("No auth token found, stopping fetch.");
+          showAlert("No authentication token found. Please log in to continue.", "error");
           return;
         }
         const response = await fetch(MODELS_ENDPOINT, {
@@ -333,21 +429,21 @@ const ForecastSettings = () => {
             "Authorization": `Bearer ${token}`,
           },
         });
-        // const response = await fetch(MODELS_ENDPOINT);
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`Failed to fetch models: ${response.status} - ${errorText}`);
         }
         const data = await response.json();
-        console.log(data); // Debugging line
+        console.log('Fetched models:', data.models); // Add logging
         setModels(data.models || []);
       } catch (error) {
-        console.error("Error fetching models:", error);
+        console.error('Error fetching models:', error); // Add error logging
+        showAlert(`Error fetching models: ${error.message}`, "error");
         // Fallback to default models if API fails
         setModels([
-          { name: "Seasonal History", createdBy: "Arjun", date: "7-Nov-2024" },
-          { name: "Intermittent History", createdBy: "Bhavana", date: "7-Nov-2024" },
-          { name: "Advanced Forecasting", createdBy: "Vishnu", date: "7-Nov-2024" },
+          "Seasonal History",
+          "Intermittent History", 
+          "Advanced Forecasting"
         ]);
       } finally {
         setIsLoadingModels(false);
@@ -555,7 +651,8 @@ const ForecastSettings = () => {
         throw new Error("No valid data rows after cleaning. Please check your data and mappings.");
       }
 
-      console.log("Cleaned data sample:", finalData.slice(0, 5));
+      // Show data sample info
+      showAlert(`Processing ${finalData.length} rows of data...`, "info");
 
       const csv = Papa.unparse(finalData);
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -570,30 +667,20 @@ const ForecastSettings = () => {
       formData.append("forecastHorizon", forecastHorizon || "30");
       formData.append("columnMappings", JSON.stringify(columnMappings || {}));
       formData.append("timeDependentVariables", JSON.stringify(timeDependentVariables || []));
-      formData.append("organizationId", organizationId || "default");  // Add organization ID
-
-      // Debug: Log form data contents
-      console.log("FormData contents:");
-      for (let pair of formData.entries()) {
-        console.log(pair[0] + ': ' + (pair[1] instanceof Blob ? 'Blob data' : pair[1]));
-      }
+      formData.append("organizationId", organizationId || "default");
 
       setIsLoading(true);
       const token = getAuthToken();
       if (!token) {
-        console.error("No auth token found, stopping fetch.");
+        showAlert("No authentication token found. Please log in to continue.", "error");
         return;
       }
-      
-      // Debug: Log request details
-      console.log("Making request to:", UPLOAD_CLEANED_DATA_ENDPOINT);
-      console.log("With token:", token.substring(0, 10) + "...");
-      
+
+      showAlert("Uploading data for processing...", "info");
+
       const response = await fetch(UPLOAD_CLEANED_DATA_ENDPOINT, {
         method: "POST",
         headers: {
-          // Don't set Content-Type when sending FormData
-          // Browser will automatically set it with the correct boundary
           "Authorization": `Bearer ${token}`,
         },
         body: formData,
@@ -607,7 +694,7 @@ const ForecastSettings = () => {
       const result = await response.json();
       
       if (result.status === "success") {
-        showAlert(`Data processed successfully! New file '${newFilename}' created.`);
+        showAlert(`Data processed successfully! New file '${newFilename}' created.`, "success");
         // Refresh the datasets list to include the new file
         fetchFiles();
         // Show statistics or summary if available
@@ -619,7 +706,6 @@ const ForecastSettings = () => {
         throw new Error(result.message || "Unknown error occurred");
       }
     } catch (error) {
-      console.error("Processing error:", error);
       showAlert(`Error processing data: ${error.message}`, "error");
     } finally {
       setIsLoading(false);
@@ -637,7 +723,7 @@ const ForecastSettings = () => {
     try {
       const token = getAuthToken();
       if (!token) {
-        console.error("No auth token found");
+        showAlert("No authentication token found. Please log in to continue.", "error");
         return;
       }
 
@@ -648,13 +734,13 @@ const ForecastSettings = () => {
         forecastHorizon: parseInt(forecastHorizon),
         timeBucket: timeBucket,
         forecastLock: parseInt(forecastLock),
-        selectedModels: forecastMethod === "Best Fit" ? [] : [selectedModel], // Empty array for Best Fit, selected model otherwise
+        selectedModels: forecastMethod === "Best Fit" ? [] : [selectedModel],
         timeDependentVariables: timeDependentVariables,
         columnMappings: columnMappings
       };
 
-      console.log("Sending forecast request:", requestBody);
-      
+      showAlert("Running forecast model...", "info");
+
       const response = await fetch(RUN_FORECAST_ENDPOINT, {
         method: "POST",
         headers: {
@@ -664,105 +750,54 @@ const ForecastSettings = () => {
         body: JSON.stringify(requestBody)
       });
       
-      // First check if the response is OK
       if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API responded with status ${response.status}: ${errorText}`);
       }
       
-      // Try to parse the JSON response
       const result = await response.json();
       
-      // Check if the response indicates an error
       if (result.status === "error") {
         throw new Error(result.message || "Unknown error occurred");
       }
-      
-      // COMPREHENSIVE DEBUG - Print full structure to identify the problem
-      console.log("==== COMPREHENSIVE DEBUG OUTPUT ====");
-      console.log("Forecast type:", result.forecast_type);
-      console.log("Selected models:", selectedModel);
-      console.log("FULL future_forecasts:", result.future_forecasts);
-      console.log("future_forecasts type:", typeof result.future_forecasts);
-      console.log("Is future_forecasts array?", Array.isArray(result.future_forecasts));
-      console.log("future_forecasts stringified:", JSON.stringify(result.future_forecasts, null, 2));
-      
-      // Deep dive into the data structure
+
+      // Process forecast type and structure
       if (result.forecast_type === "Item-wise") {
-        console.log("Item-wise forecast detected!");
+        showAlert("Processing item-wise forecast data...", "info");
         
-        // What are the top-level keys? These should be product IDs
         const topLevelKeys = Object.keys(result.future_forecasts);
-        console.log("Top level keys (should be product IDs):", topLevelKeys);
-        
-        // Check if topLevelKeys contains model names - improved detection
         const containsModelName = topLevelKeys.some(key => 
           selectedModel === key || 
           ['SES', 'ARIMA', 'SARIMA', 'Prophet', 'HWES', 'Random Forest', 'LSTM', 'XGBoost', 'Croston', 'GRU'].includes(key)
         );
         
         if (containsModelName) {
-          console.log("WARNING: Top level keys are model names, not product IDs!");
+          showAlert("Restructuring forecast data for item-wise display...", "info");
           
-          // Search for any data that might have product IDs
           let uniqueProductIds = [];
           
-          // Check original data if available
           if (result.original_data) {
-            console.log("Extracting product IDs from original data");
             uniqueProductIds = [...new Set(result.original_data.map(row => row.ProductID))];
           }
           
-          // Fallback: Try to extract product ID from the CSV file name or metadata
-          if (uniqueProductIds.length === 0 && selectedDataset) {
-            console.log("Trying to extract product ID hint from dataset name:", selectedDataset);
-            // This is a fallback mechanism only
-          }
-          
-          // If we still don't have IDs, use a meaningful label
           if (uniqueProductIds.length === 0) {
-            console.log("No product IDs could be extracted, using 'aggregated'");
             uniqueProductIds = ["aggregated"];
           }
           
-          // Restructure the forecasts
           const restructuredForecasts = {};
-          
-          // Use the actual data we received but restructure it properly
           uniqueProductIds.forEach(productId => {
             restructuredForecasts[productId] = {};
-            
-            // For each model, add its forecasts under this product ID
             for (const modelName of topLevelKeys) {
               restructuredForecasts[productId][modelName] = result.future_forecasts[modelName];
             }
           });
           
-          console.log("Restructured forecasts:", restructuredForecasts);
           result.future_forecasts = restructuredForecasts;
         }
-        
-        // Let's check one of the items
-        if (topLevelKeys.length > 0) {
-          const firstKey = topLevelKeys[0];
-          const firstItem = result.future_forecasts[firstKey];
-          console.log(`First item (${firstKey}):`, firstItem);
-          
-          // Is this a nested structure?
-          if (typeof firstItem === 'object' && !Array.isArray(firstItem)) {
-            console.log(`Item ${firstKey} contains nested model data:`, Object.keys(firstItem));
-          } else {
-            console.log(`Item ${firstKey} contains direct forecast array, length:`, Array.isArray(firstItem) ? firstItem.length : "Not an array");
-          }
-        }
       } else if (result.forecast_type === "Store-Item Combination") {
-        // Similar check for Store-Item
-        console.log("Store-Item Combination forecast detected!");
+        showAlert("Processing store-item combination forecast data...", "info");
         
         const topLevelKeys = Object.keys(result.future_forecasts);
-        console.log("Top level keys (should be store-item combos):", topLevelKeys);
-        
-        // Check if topLevelKeys look like store-item combos or if they are model names
         const hasProperComboFormat = topLevelKeys.some(key => key.includes(' - '));
         const containsModelName = topLevelKeys.some(key => 
           selectedModel === key || 
@@ -770,39 +805,33 @@ const ForecastSettings = () => {
         );
         
         if (!hasProperComboFormat && containsModelName) {
-          console.log("WARNING: Top level keys are model names, not store-item combos!");
+          showAlert("Restructuring forecast data for store-item combination display...", "info");
           
-          // Use a single representative combo ID
-          const restructuredForecasts = {};
-          restructuredForecasts["aggregated_data"] = {};
+          const restructuredForecasts = {
+            "aggregated_data": {}
+          };
           
-          // For each model, add its forecasts under the combo
           for (const modelName of topLevelKeys) {
             restructuredForecasts["aggregated_data"][modelName] = result.future_forecasts[modelName];
           }
           
-          console.log("Restructured forecasts:", restructuredForecasts);
           result.future_forecasts = restructuredForecasts;
         }
       }
-      
-      // Include column mappings in the forecast results
+
       result.columnMappings = columnMappings;
       
-      // If we got this far, the request was successful
       setIsLoading(false);
       
       if (result.status === "success") {
-        // Store forecast results in state or redirect to results page
         setForecastResults(result);
         setShowForecastResults(true);
-        showAlert(`Model ${selectedModel} execution completed successfully!`);
+        showAlert(`Model ${selectedModel} execution completed successfully!`, "success");
       } else {
-        showAlert(`Warning: ${result.message || "Unknown status returned from API"}`);
+        showAlert(`Warning: ${result.message || "Unknown status returned from API"}`, "warning");
       }
-    } catch (fetchError) {
-      console.error("API request error:", fetchError);
-      showAlert(`Error communicating with the server: ${fetchError.message}`, "error");
+    } catch (error) {
+      showAlert(`Error running forecast model: ${error.message}`, "error");
       setIsLoading(false);
     }
   };
@@ -1020,39 +1049,180 @@ const ForecastSettings = () => {
 
       {/* Alert Component */}
       {alert.isOpen && (
-        <div className={`alert alert-${alert.type}`} style={{
-          padding: "10px 15px",
-          margin: "10px 0",
-          borderRadius: "4px",
-          backgroundColor: alert.type === "error" ? "#f8d7da" : 
-                          alert.type === "success" ? "#d4edda" : 
-                          alert.type === "warning" ? "#fff3cd" : "#cce5ff",
-          color: alert.type === "error" ? "#721c24" : 
-                alert.type === "success" ? "#155724" : 
-                alert.type === "warning" ? "#856404" : "#004085",
-          border: `1px solid ${alert.type === "error" ? "#f5c6cb" : 
-                              alert.type === "success" ? "#c3e6cb" : 
-                              alert.type === "warning" ? "#ffeeba" : "#b8daff"}`,
-          position: "relative",
+        <div className="alert-overlay" style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.6)",
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 9999,
+          backdropFilter: "blur(5px)"
         }}>
-          <span>{alert.message}</span>
-          <button 
-            onClick={() => setAlert({...alert, isOpen: false})} 
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "16px",
-              cursor: "pointer",
-              color: "inherit"
-            }}
-          >
-            ×
-          </button>
+          <div className={`alert alert-${alert.type}`} style={{
+            padding: "25px 30px",
+            borderRadius: "12px",
+            backgroundColor: "#ffffff",
+            color: "#333333",
+            border: "none",
+            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
+            maxWidth: "450px",
+            width: "90%",
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            gap: "15px",
+            animation: "slideIn 0.3s ease-out"
+          }}>
+            <div style={{ 
+              display: "flex", 
+              alignItems: "flex-start",
+              gap: "15px" 
+            }}>
+              {/* Alert Icon */}
+              <div style={{
+                flexShrink: 0,
+                width: "24px",
+                height: "24px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "50%",
+                backgroundColor: alert.type === "error" ? "#FEE2E2" : 
+                               alert.type === "success" ? "#DCFCE7" : 
+                               alert.type === "warning" ? "#FEF9C3" : "#DBEAFE",
+                color: alert.type === "error" ? "#DC2626" : 
+                       alert.type === "success" ? "#16A34A" : 
+                       alert.type === "warning" ? "#CA8A04" : "#2563EB"
+              }}>
+                {alert.type === "error" && (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.33333V8M8 10.6667H8.00667M14 8C14 11.3137 11.3137 14 8 14C4.68629 14 2 11.3137 2 8C2 4.68629 4.68629 2 8 2C11.3137 2 14 4.68629 14 8Z" 
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                {alert.type === "success" && (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M13.3333 4L6 11.3333L2.66667 8" 
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                {alert.type === "warning" && (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.33333V8M8 10.6667H8.00667M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14Z" 
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                {alert.type === "info" && (
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 5.33333H8.00667M8 8V10.6667M8 14C11.3137 14 14 11.3137 14 8C14 4.68629 11.3137 2 8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14Z" 
+                          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+
+              {/* Alert Message */}
+              <span style={{ 
+                flex: 1,
+                fontSize: "15px",
+                lineHeight: "1.5",
+                color: "#1F2937",
+                fontWeight: "500"
+              }}>{alert.message}</span>
+
+              {/* Close Button */}
+              <button 
+                onClick={() => setAlert({...alert, isOpen: false})} 
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "20px",
+                  cursor: "pointer",
+                  color: "#9CA3AF",
+                  padding: "0",
+                  marginLeft: "10px",
+                  marginTop: "-5px",
+                  opacity: "0.7",
+                  transition: "all 0.2s",
+                  width: "24px",
+                  height: "24px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "6px",
+                  ":hover": {
+                    backgroundColor: "#F3F4F6",
+                    opacity: "1",
+                    color: "#4B5563"
+                  }
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Progress Bar for Info/Loading alerts */}
+            {alert.type === "info" && (
+              <div style={{
+                width: "100%",
+                height: "2px",
+                backgroundColor: "#E5E7EB",
+                borderRadius: "1px",
+                overflow: "hidden",
+                marginTop: "5px"
+              }}>
+                <div style={{
+                  width: "100%",
+                  height: "100%",
+                  backgroundColor: "#60A5FA",
+                  animation: "progress 2s linear infinite"
+                }}></div>
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      <style>
+        {`
+          @keyframes slideIn {
+            from {
+              opacity: 0;
+              transform: translateY(-30px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @keyframes progress {
+            0% {
+              transform: translateX(-100%);
+            }
+            100% {
+              transform: translateX(100%);
+            }
+          }
+
+          .alert-overlay {
+            transition: all 0.3s ease-in-out;
+          }
+
+          .alert {
+            transition: all 0.3s ease-in-out;
+          }
+
+          button:hover {
+            background-color: #F3F4F6 !important;
+            opacity: 1 !important;
+            color: #4B5563 !important;
+          }
+        `}
+      </style>
 
       <div className="forecast-methodology-section" style={{ marginBottom: "20px", marginTop: "20px" }}>
         <h4 style={{ fontSize: "18px", marginBottom: "10px" }}><strong>Forecast Methodology :</strong></h4>
@@ -1084,13 +1254,13 @@ const ForecastSettings = () => {
           disabled={uploadedDatasets.length === 0}
         >
           <option value="">Select a Dataset</option>
-          {uploadedDatasets.map((dataset, index) => (
-            <option key={index} value={dataset}>{dataset}</option>
-          ))}
+          {uploadedDatasets.length > 0 && (
+            <option key={0} value={uploadedDatasets[0]}>{uploadedDatasets[0]}</option>
+          )}
         </select>
         {uploadedDatasets.length === 0 && (
           <p style={{ color: "#DC3545", fontSize: "14px", marginTop: "5px" }}>
-            No datasets uploaded. Please upload data in the Import section.
+            No file uploaded yet. Please upload data in the Import section.
           </p>
         )}
       </div>
@@ -1186,34 +1356,28 @@ const ForecastSettings = () => {
       {showTable && Array.isArray(importedData) && importedData.length > 0 && Array.isArray(columnNames) && columnNames.length > 0 && (
         <div className="imported-data-table">
           <h3>Preview First 5 Rows</h3>
-          <table>
-            <thead>
-              <tr>
-                {columnNames.map((col, index) => (
-                  <th key={index} scope="col">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {importedData.slice(0, 5).map((row, index) => (
-                <tr key={index}>
-                  {columnNames.map((col, colIndex) => (
-                    <td key={colIndex}>
-                      <input
-                        type="text"
-                        value={row[col] || ""}
-                        onChange={(e) => handleFieldChange(index, col, e.target.value)}
-                        aria-label={`View ${col} for row ${index + 1}`}
-                        readOnly={true} // Make fields non-editable after preview
-                      />
-                    </td>
+          <div className="preview-table-container">
+            <table>
+              <thead>
+                <tr>
+                  {columnNames.map((col, index) => (
+                    <th key={index} scope="col">{col}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {importedData.slice(0, 5).map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {columnNames.map((col, colIndex) => (
+                      <td key={colIndex}>
+                        {row[col] || ""}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <button
             ref={uploadButtonRef}
             className="upload-data-for-cleaning"
@@ -1256,7 +1420,9 @@ const ForecastSettings = () => {
               <option value="" disabled>Loading models...</option>
             ) : (
               models.map((model, index) => (
-                <option key={index} value={model}>{model}</option>
+                <option key={index} value={typeof model === 'string' ? model : model.name}>
+                  {typeof model === 'string' ? model : model.name}
+                </option>
               ))
             )}
           </select>
@@ -1563,33 +1729,24 @@ const ForecastSettings = () => {
                 // Item-wise forecast type display
                 <div className="item-wise-forecast">
                   <div className="item-selector">
-                    <label>Select Product:</label>
+                    <label>Select Item:</label>
                     <select onChange={(e) => {
-                      const itemId = e.target.value;
-                      document.getElementById(`item-forecast-${itemId}`)?.scrollIntoView({ behavior: 'smooth' });
+                      const productId = e.target.value;
+                      document.getElementById(`item-forecast-${productId}`)?.scrollIntoView({ behavior: 'smooth' });
                     }}>
                       {(() => {
-                        // Get all product IDs (top-level keys)
                         const productIds = Object.keys(forecastResults.future_forecasts || {});
-                        
-                        // Log for debugging
-                        console.log("Product IDs for dropdown:", productIds);
-                        
-                        // Map them to options, with nice display format
                         return productIds.map(productId => {
-                          // Format the display value for special cases
-                          let displayValue = productId;
-                          
+                          let displayName = productId;
                           if (productId === "default_product") {
-                            displayValue = "All Products";
+                            displayName = "All Products";
                           } else if (productId === "all_items") {
-                            displayValue = "All Items";
-                          } else if (productId === "aggregated" || productId === "aggregated_data") {
-                            displayValue = "Aggregated Data";
+                            displayName = "All Items";
+                          } else if (productId === "aggregated") {
+                            displayName = "Aggregated Data";
                           }
-                          
                           return (
-                            <option key={productId} value={productId}>{displayValue}</option>
+                            <option key={productId} value={productId}>{displayName}</option>
                           );
                         });
                       })()}
@@ -1597,23 +1754,13 @@ const ForecastSettings = () => {
                   </div>
                   
                   {(() => {
-                    // Get all entries from future_forecasts
                     const entries = Object.entries(forecastResults.future_forecasts || {});
-                    
-                    // Map each entry to a forecast display
                     return entries.map(([productId, modelForecasts]) => {
-                      console.log(`Rendering item ${productId} with forecasts:`, modelForecasts);
-                      
-                      // Check data structure - is it nested or flat?
                       const isNestedStructure = typeof modelForecasts === 'object' && !Array.isArray(modelForecasts);
-                      
-                      // Get model names based on structure
                       const modelNames = isNestedStructure 
                         ? Object.keys(modelForecasts) 
                         : [selectedModel || "Forecast"];
-                      
-                      console.log(`Item ${productId} modelNames:`, modelNames);
-                      
+
                       return (
                         <div key={productId} id={`item-forecast-${productId}`} className="item-forecast">
                           <h5>Product: {
@@ -1633,8 +1780,7 @@ const ForecastSettings = () => {
                             </thead>
                             <tbody>
                               {Array.from({ length: parseInt(forecastHorizon) || 30 }).map((_, index) => {
-                                // Detect frequency and generate future dates from current date
-                                const dataFrequency = detectDataFrequency(forecastResults.dates);
+                                const dataFrequency = detectDataFrequency(forecastResults.dates || []);
                                 const futureDates = generateFutureDatesFromCurrent(parseInt(forecastHorizon) || 30, dataFrequency);
                                 const futureDate = futureDates[index];
                                 
@@ -1642,27 +1788,31 @@ const ForecastSettings = () => {
                                   <tr key={index}>
                                     <td>{futureDate ? futureDate.toISOString().split('T')[0] : `Future_${index + 1}`}</td>
                                     {modelNames.map(modelName => {
-                                      // Get forecasts based on structure
                                       const forecasts = isNestedStructure
                                         ? modelForecasts[modelName]
                                         : modelForecasts;
                                       
-                                      return (
-                                        <td key={modelName}>
-                                          {Array.isArray(forecasts) && index < forecasts.length
-                                            ? typeof forecasts[index] === 'number'
-                                              ? forecasts[index].toFixed(2)
-                                              : forecasts[index]
-                                            : 'N/A'}
-                                        </td>
-                                      );
+                                      let forecastValue = 'N/A';
+                                      if (Array.isArray(forecasts) && index < forecasts.length) {
+                                        const value = forecasts[index];
+                                        if (typeof value === 'object' && value !== null) {
+                                          // If the value is an object, extract the relevant property
+                                          forecastValue = value.value || value.forecast || 'N/A';
+                                        } else if (typeof value === 'number') {
+                                          forecastValue = value.toFixed(2);
+                                        } else {
+                                          forecastValue = value || 'N/A';
+                                        }
+                                      }
+                                      
+                                      return <td key={modelName}>{forecastValue}</td>;
                                     })}
                                   </tr>
                                 );
                               })}
-                </tbody>
-              </table>
-            </div>
+                            </tbody>
+                          </table>
+                        </div>
                       );
                     });
                   })()}
@@ -1679,9 +1829,6 @@ const ForecastSettings = () => {
                       {(() => {
                         // Get all combo IDs (top-level keys)
                         const comboIds = Object.keys(forecastResults.future_forecasts || {});
-                        
-                        // Log for debugging
-                        console.log("Combo IDs for dropdown:", comboIds);
                         
                         // Map them to options
                         return comboIds.map(comboId => {

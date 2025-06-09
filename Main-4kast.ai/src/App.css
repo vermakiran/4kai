@@ -14,6 +14,8 @@
   display: flex;
   height: 100vh;
   width: 100vw;
+  max-width: 100%;  /* Ensure it never exceeds viewport width */
+  overflow-x: hidden;  /* Prevent horizontal scroll on the main container */
 }
  
 /* Sidebar Container */
@@ -98,20 +100,14 @@
 
  
 /* ======================= MAIN CONTENT ======================= */
-.main-content1 {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: row;
-  height: 100vh;
-}
- 
-/* ======================= MAIN CONTENT ======================= */
 .main-content {
   flex-grow: 1;
   margin-left: 260px; /* Adjusted to match sidebar width */
   display: flex;
   flex-direction: column;
   height: 100vh;
+  max-width: calc(100vw - 260px); /* Ensure content doesn't exceed available width */
+  overflow-x: hidden; /* Hide horizontal overflow */
 }
  
 /* ======================= NAVBAR ======================= */
@@ -135,8 +131,8 @@
  
 /* 4kast.ai Logo - Left Aligned */
 .navbar-logo {
-  font-size: 24px;
-  font-weight: bold;
+  width: 160px; /* Adjust based on your logo's dimensions */
+  height: auto; /* Maintain aspect ratio */
 }
  
 /* Centered Search Bar */
@@ -207,18 +203,149 @@
   background-color: #ffffff;
   overflow-y: auto;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
  
 /* ======================= DASHBOARD STYLES ======================= */
 /* Dashboard Container */
-.dashboard {
-  padding: 20px; /* Reverted to uniform padding, which adds more space on the left */
-  background-color: #f5f5f5;
-  max-width: 1400px;
-  margin: 0 auto; /* Centered with auto margins, adds space on the left */
-  font-family: Arial, sans-serif;
+.dashboard-container {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
 }
- 
+
+.dashboard-header {
+  background: linear-gradient(135deg, #001F3F 0%, #003366 100%);
+  border-radius: 20px;
+  padding: 40px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user-welcome {
+  color: white;
+}
+
+.user-welcome h2 {
+  font-size: 1.5rem;
+  font-weight: 400;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.user-welcome h1 {
+  font-size: 2.5rem;
+  font-weight: 600;
+  margin: 5px 0 0 0;
+}
+
+.header-profile-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.header-user-icon {
+  font-size: 60px;
+  color: white;
+  opacity: 0.9;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 15px;
+  }
+
+  .dashboard-header {
+    padding: 25px;
+    margin-bottom: 20px;
+  }
+
+  .user-welcome h2 {
+    font-size: 1.2rem;
+  }
+
+  .user-welcome h1 {
+    font-size: 2rem;
+  }
+
+  .header-profile-img,
+  .header-user-icon {
+    width: 50px;
+    height: 50px;
+    font-size: 50px;
+  }
+}
+
+/* Worksheet Container */
+.worksheet-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: 20px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Chart Grid */
+.chart-grid {
+  display: grid;
+  gap: 20px;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* Responsive Table Container */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+/* Ensure all charts are responsive */
+.recharts-responsive-container {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Ensure modal content doesn't overflow */
+.chart-modal-content {
+  max-width: 90vw;
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* Make sure all flex containers respect boundaries */
+.flex-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  display: flex;
+  flex-wrap: wrap;
+}
+
 .dashboard-title {
   color: #002855;
   margin-bottom: 10px;
@@ -386,6 +513,9 @@
   height: 400px; /* Makes the chart area larger */
   display: flex;
   flex-direction: column;
+  width: 100%;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 /* Heatmap Grid */
@@ -454,6 +584,9 @@
   padding: 20px;
   width: 100%;
   min-height: 300px;
+  width: 100%;
+  overflow-x: auto;
+  max-width: 100%;
 }
  
 .y-axis-label {
@@ -1039,6 +1172,10 @@
 .table-container {
   overflow-x: auto;
   max-height: 400px;
+  width: 100%;
+  overflow-x: auto;  /* Enable horizontal scroll for tables */
+  margin-bottom: 1rem;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 table {
@@ -1047,6 +1184,7 @@ table {
   margin-top: 10px;
   background: #FFFFFF;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  min-width: max-content; /* Ensure all columns are visible */
 }
 
 th,
@@ -2313,72 +2451,126 @@ tr:hover {
   position: relative;
   display: inline-block;
 }
- 
+
 .bell-icon {
   font-size: 24px;
   cursor: pointer;
-  color: #001F3F;
-  transition: transform 0.2s;
+  color: white;
+  transition: all 0.3s ease;
 }
- 
+
 .bell-icon:hover {
   transform: scale(1.1);
+  opacity: 0.9;
 }
- 
+
 .notification-popup {
   position: absolute;
-  top: 40px;
-  right: 0;
-  width: 300px;
-  background: #fff;
-  box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  z-index: 100;
-  padding: 15px;
+  top: 45px;
+  right: -10px;
+  width: 350px;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  z-index: 1000;
+  padding: 20px;
+  border: 1px solid rgba(0, 31, 63, 0.1);
+  animation: slideDown 0.3s ease-out;
 }
- 
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.notification-popup::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: 15px;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  transform: rotate(45deg);
+  border-left: 1px solid rgba(0, 31, 63, 0.1);
+  border-top: 1px solid rgba(0, 31, 63, 0.1);
+}
+
 .popup-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 16px;
-  font-weight: bold;
-  border-bottom: 1px solid #ddd;
-  padding-bottom: 8px;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(0, 31, 63, 0.1);
 }
- 
+
+.popup-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #001F3F;
+  margin: 0;
+}
+
 .close-icon {
   cursor: pointer;
-  font-size: 18px;
-  color: #777;
+  font-size: 20px;
+  color: #666;
+  transition: all 0.2s ease;
+  padding: 5px;
 }
- 
+
+.close-icon:hover {
+  color: #001F3F;
+  transform: scale(1.1);
+}
+
 .notification-section {
-  margin-top: 10px;
+  margin-bottom: 20px;
 }
- 
+
 .notification-section h4 {
   font-size: 14px;
   color: #001F3F;
-  margin-bottom: 5px;
+  margin-bottom: 10px;
+  font-weight: 600;
 }
- 
+
 .notification-item {
-  font-size: 13px;
-  padding: 8px;
-  border-radius: 5px;
-  margin-bottom: 5px;
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  transition: all 0.2s ease;
 }
- 
+
+.notification-item:hover {
+  transform: translateX(5px);
+}
+
 .new {
-  background: #f0f8ff;
+  background: rgba(0, 31, 63, 0.05);
   color: #001F3F;
-  font-weight: bold;
+  font-weight: 500;
 }
- 
+
 .old {
-  background: #f7f7f7;
-  color: #555;
+  background: #f8f9fa;
+  color: #495057;
+}
+
+.no-notifications {
+  color: #6c757d;
+  font-style: italic;
+  text-align: center;
+  padding: 10px;
 }
 
 /* Notifications */
@@ -2755,6 +2947,10 @@ tr:hover {
   justify-content: space-around; /* Evenly distribute cards */
   align-items: stretch; /* Ensures all cards have the same height */
   padding: 20px; /* Added padding for better container spacing */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 /* Card Base Styles (Applied to all cards) */
@@ -3093,8 +3289,10 @@ html, body {
 /* Left side with image */
 .login-image {
   flex: 1;
-  background: url('/src/assets/images/Data analysis concept illustration (1).jpeg') no-repeat center center/cover; /* Updated with your path */
-  min-width: 50%;
+  background: url('/src/assets/images/Data analysis concept illustration (1).png') no-repeat center center/cover; /* Updated with your path */
+  min-width: 0%;
+  background-size: 99%;
+
 }
 
 /* Right side with login box */

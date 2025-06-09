@@ -310,85 +310,87 @@ const allDates = filteredTableData
   };
 
   const renderWorksheet = () => {
-  if (!tableData) return null;
-
-  return (
-    <div className="worksheet">
-      <h3>Worksheet</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>Entity</th>
-            <th>Measure</th>
-            {allDates.map(date => (
-              <th key={date}>
-                {timeBucket === "Daily" && moment(date).format("DD MMM YYYY")}
-                {timeBucket === "Monthly" && moment(date, "YYYY-MM").format("MMM YYYY")}
-                {timeBucket === "Yearly" && date}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(groupedTableData).map(([store, products]) => (
-            <React.Fragment key={store}>
-              {Object.entries(products).map(([product, dateRows], productIdx) =>
-                measures.map((measure, mIdx) => (
-                  <tr key={`${store}-${product}-${measure.key}`}>
-                    {mIdx === 0 && (
-                      <td rowSpan={measures.length}><b>{store}-{product}</b></td>
+    return (
+      <div className="worksheet-container" style={{ width: '100%', overflowX: 'auto', maxWidth: '100%' }}>
+        <div className="worksheet">
+          <h3>Demand Planning Worksheet</h3>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Entity</th>
+                  <th>Measure</th>
+                  {allDates.map(date => (
+                    <th key={date}>
+                      {timeBucket === "Daily" && moment(date).format("DD MMM YYYY")}
+                      {timeBucket === "Monthly" && moment(date, "YYYY-MM").format("MMM YYYY")}
+                      {timeBucket === "Yearly" && date}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(groupedTableData).map(([store, products]) => (
+                  <React.Fragment key={store}>
+                    {Object.entries(products).map(([product, dateRows], productIdx) =>
+                      measures.map((measure, mIdx) => (
+                        <tr key={`${store}-${product}-${measure.key}`}>
+                          {mIdx === 0 && (
+                            <td rowSpan={measures.length}><b>{store}-{product}</b></td>
+                          )}
+                          <td>{measure.label}</td>
+                          {allDates.map(date => {
+                            const row = dateRows[date] || {};
+                            const cellKey = `${store}||${product}||${date}`;
+                            // Manual Forecast is editable
+                            if (measure.key === "MANUALDEMAND") {
+                              return (
+                                <td key={date}>
+                                  {isEditing ? (
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={
+                                        editedCells[cellKey]?.MANUALDEMAND !== undefined
+                                          ? editedCells[cellKey].MANUALDEMAND
+                                          : row.MANUALDEMAND ?? ""
+                                      }
+                                      onChange={e =>
+                                        handleCellEdit(store, product, date, "MANUALDEMAND", e.target.value)
+                                      }
+                                      style={{
+                                        width: "80px",
+                                        padding: "2px 4px",
+                                        textAlign: "right"
+                                      }}
+                                    />
+                                  ) : (
+                                    row.MANUALDEMAND !== undefined && row.MANUALDEMAND !== ""
+                                      ? row.MANUALDEMAND
+                                      : "-"
+                                  )}
+                                </td>
+                              );
+                            }
+                            // All other measures are read-only
+                            return (
+                              <td key={date}>
+                                {row[measure.key] !== undefined && row[measure.key] !== "" ? row[measure.key] : "-"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
                     )}
-                    <td>{measure.label}</td>
-                    {allDates.map(date => {
-                      const row = dateRows[date] || {};
-                      const cellKey = `${store}||${product}||${date}`;
-                      // Manual Forecast is editable
-                      if (measure.key === "MANUALDEMAND") {
-                        return (
-                          <td key={date}>
-                            {isEditing ? (
-                              <input
-                                type="number"
-                                min="0"
-                                value={
-                                  editedCells[cellKey]?.MANUALDEMAND !== undefined
-                                    ? editedCells[cellKey].MANUALDEMAND
-                                    : row.MANUALDEMAND ?? ""
-                                }
-                                onChange={e =>
-                                  handleCellEdit(store, product, date, "MANUALDEMAND", e.target.value)
-                                }
-                                style={{
-                                  width: "80px",
-                                  padding: "2px 4px",
-                                  textAlign: "right"
-                                }}
-                              />
-                            ) : (
-                              row.MANUALDEMAND !== undefined && row.MANUALDEMAND !== ""
-                                ? row.MANUALDEMAND
-                                : "-"
-                            )}
-                          </td>
-                        );
-                      }
-                      // All other measures are read-only
-                      return (
-                        <td key={date}>
-                          {row[measure.key] !== undefined && row[measure.key] !== "" ? row[measure.key] : "-"}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))
-              )}
-            </React.Fragment>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
 
   return (

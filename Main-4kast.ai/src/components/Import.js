@@ -31,7 +31,6 @@ const CustomAlert = ({ message, type, isOpen, onClose, onConfirm }) => {
 };
 
 function ImportData() {
-  const [importLog, setImportLog] = useState("");
   const [fileList, setFileList] = useState([]);
   const [previewData, setPreviewData] = useState(null);
   const [previewHeaders, setPreviewHeaders] = useState([]);
@@ -210,7 +209,6 @@ debugger;
       const result = await response.json();
   
       if (response.ok) {
-        setImportLog(`File "${file.name}" uploaded successfully.`);
         showAlert("File uploaded successfully!", "success");
         fetchFiles();
       } else {
@@ -409,7 +407,6 @@ debugger;
             const result = await response.json();
   
             if (response.ok) {
-              setImportLog(`File "${fileList[0]}" updated successfully with new data`);
               showAlert("File updated successfully!", "success");
               fetchFiles();
             } else {
@@ -503,22 +500,25 @@ debugger;
           <h3 className="template-title">Upload Data</h3>
           <div className="template-content">
             <label>Import from</label>
-            <select className="input-field">
+            <select className="input-field" disabled>
               <option>Local device</option>
-              <option>Online</option>
             </select>
 
             <div className="btn-group">
               <button className="cancel-btn">Cancel</button>
-              <button className="save-btn" onClick={handleImportClick}>
-                Import
+              <button 
+                className="save-btn" 
+                onClick={handleImportClick}
+                title="Import a new file. This will replace the current file if one exists."
+              >
+                Import New
               </button>
               <button 
                 className="update-btn" 
                 onClick={handleUpdateClick}
-                title="Append new data to existing file"
+                title="Append new data to the existing file"
               >
-                Update
+                Append
               </button>
             </div>
 
@@ -538,11 +538,6 @@ debugger;
             />
           </div>
         </div>
-      </div>
-
-      <div className="import-log">
-        <h3>Import log</h3>
-        <p>{importLog || "No files uploaded yet"}</p>
       </div>
 
       <div className="file-list" style={{ marginTop: "20px" }}>

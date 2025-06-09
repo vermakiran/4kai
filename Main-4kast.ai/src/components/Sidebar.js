@@ -71,8 +71,7 @@ const menuItems = [
   { name: "Planner Workbench", path: "/planner-workbench", icon: <FaWrench /> },
   // { name: "Outlier Report", path: "/outlier-report", icon: <FaCogs /> },
   // { name: "Integration Scenarios", path: "/integration-scenarios", icon: <FaProjectDiagram /> },
-  { name: "Master Data", path: "/master-data", icon: <FaDatabase /> },
-  { name: "I AM", path: "/iam", icon: <FaChartBar /> },
+  { name: "Admin Settings", path: "/iam", icon: <FaChartBar /> },
 ];
 
 function Sidebar() {

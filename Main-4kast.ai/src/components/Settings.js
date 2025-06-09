@@ -17,7 +17,11 @@ function Settings() {
   const navigate = useNavigate(); // Initialize navigate for redirection
 
   const handleSettingClick = (setting) => {
-    setSelectedSetting(selectedSetting === setting ? null : setting);
+    if (setting === "Account") {
+      navigate('/profile');
+    } else {
+      setSelectedSetting(selectedSetting === setting ? null : setting);
+    }
   };
 
   const handleThemeChange = (theme) => {
@@ -98,7 +102,6 @@ function Settings() {
     <div className="settings-container">
       {/* Header Section */}
       <div className="settings-header">
-        <FaArrowLeft className="back-icon" />
         <h2>Settings</h2>
       </div>
 
@@ -121,10 +124,7 @@ function Settings() {
               <span className="settings-icon">{item.icon}</span>
               <span>{item.label}</span>
             </div>
-            <span className="arrow" onClick={() => handleSettingClick(item.label)}>›</span>
-
-            {/* Submenu */}
-            {selectedSetting === item.label && (
+            {item.label !== "Account" && selectedSetting === item.label && (
               <div className="submenu-container">
                 <button className="close-btn" onClick={() => setSelectedSetting(null)}>×</button>
                 {settingsData[selectedSetting]}
@@ -139,7 +139,6 @@ function Settings() {
             <span className="settings-icon"><FaArrowLeft /></span>
             <span>Logout</span>
           </div>
-          <span className="arrow" onClick={handleLogout}>›</span>
         </div>
       </div>
     </div>

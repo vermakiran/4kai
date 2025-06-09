@@ -268,120 +268,206 @@ function cellTooltip(x, y, value) {
 }
 
   return (
-    <div className="dashboard">
-      <h2 className="dashboard-title">
-        Forecast Analytics Dashboard <span style={{ fontWeight: 400, fontSize: 22 }}>(Forecast ID: {kpiData.latest_forecastid})</span>
-      </h2>
-      {/* --- KPI CARDS: GRID --- */}
-      <div className="kpi-row">
-        <div className="kpi-card" style={{ backgroundColor: COLORS[0] }}>
-          <h4>Total Forecasted Demand</h4>
-          <h2>
-            <CountUp end={kpiData.total_demand || 0} prefix="#" separator="," decimals={2} duration={1.2} />
-          </h2>
-        </div>
-        <div className="kpi-card" style={{ backgroundColor: COLORS[1] }}>
-          <h4>MAPE</h4>
-          <h2>
-            <CountUp end={kpiData.mape || 0} suffix="%" decimals={2} duration={1.1} />
-          </h2>
-        </div>
-        <div className="kpi-card" style={{ backgroundColor: COLORS[2] }}>
-          <h4>MAE</h4>
-          <h2>
-            <CountUp end={kpiData.mae || 0} decimals={2} duration={1.1} />
-          </h2>
-        </div>
-        <div className="kpi-card" style={{ backgroundColor: COLORS[3] }}>
-          <h4>Forecast Accuracy</h4>
-          <h2>
-            <CountUp end={kpiData.fva || 0} suffix="%" decimals={2} duration={1.1} />
-          </h2>
-        </div>
-        <div className="kpi-card" style={{ backgroundColor: COLORS[4] }}>
-          <h4>Forecast Bias</h4>
-          <h2>
-            <CountUp end={kpiData.bias || 0} decimals={2} duration={1.1} />
-          </h2>
-        </div>
-        <div className="kpi-card" style={{ backgroundColor: COLORS[5] }}>
-          <h4>Number of Products</h4>
-          <h2>
-            <CountUp end={kpiData.num_products || 0} duration={1.1} />
-          </h2>
-        </div>
-        <div className="kpi-card" style={{ backgroundColor: COLORS[6] }}>
-          <h4>Weighted MAPE</h4>
-          <h2>
-            <CountUp end={kpiData.weighted_mape || 0} suffix="%" decimals={2} duration={1.1} />
-          </h2>
-        </div>
-      </div>
-
-      {/* --- MAIN CONTENT: VERTICAL FILTER SIDEBAR + CHARTS --- */}
-      <div className="dashboard-main-content">
-        <div className="dashboard-filters-vertical">
-          <div className="filter-group">
-            <label>Product:</label>
-            <select value={pendingProduct} onChange={e => setPendingProduct(e.target.value)}>
-              {products.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>Model:</label>
-            <select value={pendingModel} onChange={e => setPendingModel(e.target.value)}>
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>Store:</label>
-            <select value={pendingStore} onChange={e => setPendingStore(e.target.value)}>
-              <option value="">All Stores</option>
-              {storeList.map((store) => (
-                <option key={store} value={store}>
-                  {store}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-group">
-            <label>Start Date:</label>
-            <input
-              type="date"
-              value={pendingStartDate}
-              min={minDate}
-              max={maxDate}
-              onChange={e => setPendingStartDate(e.target.value)}
-            />
-          </div>
-          <div className="filter-group">
-            <label>End Date:</label>
-            <input
-              type="date"
-              value={pendingEndDate}
-              min={minDate}
-              max={maxDate}
-              onChange={e => setPendingEndDate(e.target.value)}
-            />
-          </div>
-          <div className="filter-buttons-vertical">
-            <button onClick={handleApply}>Apply Filters</button>
-            <button onClick={handleReset}>Reset Filters</button>
+    <div className="dashboard-container" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+      <div className="dashboard-content">
+        <h2 className="dashboard-title">
+          Forecast Analytics Dashboard <span style={{ fontWeight: 400, fontSize: 22 }}>(Forecast ID: {kpiData.latest_forecastid})</span>
+        </h2>
+        {/* --- KPI CARDS: GRID --- */}
+        <div className="kpi-container" style={{ width: '100%', maxWidth: '100%', overflowX: 'hidden' }}>
+          <div className="kpi-row">
+            <div className="kpi-card" style={{ backgroundColor: COLORS[0] }}>
+              <h4>Total Forecasted Demand</h4>
+              <h2>
+                <CountUp end={kpiData.total_demand || 0} prefix="#" separator="," decimals={2} duration={1.2} />
+              </h2>
+            </div>
+            <div className="kpi-card" style={{ backgroundColor: COLORS[1] }}>
+              <h4>MAPE</h4>
+              <h2>
+                <CountUp end={kpiData.mape || 0} suffix="%" decimals={2} duration={1.1} />
+              </h2>
+            </div>
+            <div className="kpi-card" style={{ backgroundColor: COLORS[2] }}>
+              <h4>MAE</h4>
+              <h2>
+                <CountUp end={kpiData.mae || 0} decimals={2} duration={1.1} />
+              </h2>
+            </div>
+            <div className="kpi-card" style={{ backgroundColor: COLORS[3] }}>
+              <h4>Forecast Accuracy</h4>
+              <h2>
+                <CountUp end={kpiData.fva || 0} suffix="%" decimals={2} duration={1.1} />
+              </h2>
+            </div>
+            <div className="kpi-card" style={{ backgroundColor: COLORS[4] }}>
+              <h4>Forecast Bias</h4>
+              <h2>
+                <CountUp end={kpiData.bias || 0} decimals={2} duration={1.1} />
+              </h2>
+            </div>
+            <div className="kpi-card" style={{ backgroundColor: COLORS[5] }}>
+              <h4>Number of Products</h4>
+              <h2>
+                <CountUp end={kpiData.num_products || 0} duration={1.1} />
+              </h2>
+            </div>
+            <div className="kpi-card" style={{ backgroundColor: COLORS[6] }}>
+              <h4>Weighted MAPE</h4>
+              <h2>
+                <CountUp end={kpiData.weighted_mape || 0} suffix="%" decimals={2} duration={1.1} />
+              </h2>
+            </div>
           </div>
         </div>
 
-        <div className="dashboard-charts-vertical">
-          <div className="dashboard-charts-grid">
-            {/* Line Chart */}
-            <div className="chart-box chart-box-full" style={{ gridColumn: "1 / -1" }}>
-              <button
-                className="chart-expand-btn"
-                title="Expand chart"
-                onClick={() => setExpandedChart("line")}
-              >⛶</button>
-              <h4>Historical vs Forecasted Demand</h4>
-              {lineData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+        {/* --- MAIN CONTENT: VERTICAL FILTER SIDEBAR + CHARTS --- */}
+        <div className="dashboard-main-content">
+          <div className="dashboard-filters-vertical">
+            <div className="filter-group">
+              <label>Product:</label>
+              <select value={pendingProduct} onChange={e => setPendingProduct(e.target.value)}>
+                {products.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Model:</label>
+              <select value={pendingModel} onChange={e => setPendingModel(e.target.value)}>
+                {models.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Store:</label>
+              <select value={pendingStore} onChange={e => setPendingStore(e.target.value)}>
+                <option value="">All Stores</option>
+                {storeList.map((store) => (
+                  <option key={store} value={store}>
+                    {store}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="filter-group">
+              <label>Start Date:</label>
+              <input
+                type="date"
+                value={pendingStartDate}
+                min={minDate}
+                max={maxDate}
+                onChange={e => setPendingStartDate(e.target.value)}
+              />
+            </div>
+            <div className="filter-group">
+              <label>End Date:</label>
+              <input
+                type="date"
+                value={pendingEndDate}
+                min={minDate}
+                max={maxDate}
+                onChange={e => setPendingEndDate(e.target.value)}
+              />
+            </div>
+            <div className="filter-buttons-vertical">
+              <button onClick={handleApply}>Apply Filters</button>
+              <button onClick={handleReset}>Reset Filters</button>
+            </div>
+          </div>
+
+          <div className="dashboard-charts-vertical">
+            <div className="dashboard-charts-grid">
+              {/* Line Chart */}
+              <div className="chart-box chart-box-full" style={{ gridColumn: "1 / -1" }}>
+                <button
+                  className="chart-expand-btn"
+                  title="Expand chart"
+                  onClick={() => setExpandedChart("line")}
+                >⛶</button>
+                <h4>Historical vs Forecasted Demand</h4>
+                {lineData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={lineData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis tickFormatter={value => `${value.toLocaleString()}`} />
+                      <Tooltip formatter={value => `${value.toLocaleString()}`} />
+                      <Legend />
+                      <Line type="monotone" dataKey="value" stroke="#002855" name="Actual" strokeWidth={2} />
+                      <Line type="monotone" dataKey="forecast" stroke="#00509E" name="Forecast" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : <p>No data available.</p>}
+              </div>
+
+              {/* Bar Chart */}
+              <div className="chart-box">
+                <button
+                  className="chart-expand-btn"
+                  title="Expand chart"
+                  onClick={() => setExpandedChart("bar")}
+                >⛶</button>
+                <h4>Product Sales Bar Chart</h4>
+                {barData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={barData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="sales" fill="#007BFF" name="Sales" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : <p>No bar chart data available.</p>}
+              </div>
+
+              {/* Waterfall Chart */}
+              <div className="chart-box">
+                <button
+                  className="chart-expand-btn"
+                  title="Expand chart"
+                  onClick={() => setExpandedChart("waterfall")}
+                >⛶</button>
+                <h4>Forecast Accuracy Impact by Product</h4>
+                {waterfallData.length > 0 ? (
+                  <WaterfallChart data={waterfallData} />
+                ) : <p>No data available for waterfall chart.</p>}
+              </div>
+
+              {/* Pie Chart */}
+              <div className="chart-box">
+                <button
+                  className="chart-expand-btn"
+                  title="Expand chart"
+                  onClick={() => setExpandedChart("pie")}
+                >⛶</button>
+                <h4>Forecast Accuracy Distribution</h4>
+                {pieDataAll.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={pieDataAll}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        fill="#8884d8"
+                        dataKey="value"
+                        label={({ name, value }) => `${name}: ${value}%`}
+                        labelLine={true}
+                      >
+                        {pieDataAll.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : <p>No pie chart data available.</p>}
+              </div>
+              {/* --- Modals for Expanding Each Chart --- */}
+              <ChartModal open={expandedChart === "line"} onClose={() => setExpandedChart(null)}>
+                <h3>Historical vs Forecasted Demand</h3>
+                <ResponsiveContainer width="100%" height={500}>
                   <LineChart data={lineData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
@@ -392,19 +478,11 @@ function cellTooltip(x, y, value) {
                     <Line type="monotone" dataKey="forecast" stroke="#00509E" name="Forecast" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
-              ) : <p>No data available.</p>}
-            </div>
+              </ChartModal>
 
-            {/* Bar Chart */}
-            <div className="chart-box">
-              <button
-                className="chart-expand-btn"
-                title="Expand chart"
-                onClick={() => setExpandedChart("bar")}
-              >⛶</button>
-              <h4>Product Sales Bar Chart</h4>
-              {barData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+              <ChartModal open={expandedChart === "bar"} onClose={() => setExpandedChart(null)}>
+                <h3>Product Sales Bar Chart</h3>
+                <ResponsiveContainer width="100%" height={500}>
                   <BarChart data={barData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
@@ -414,38 +492,24 @@ function cellTooltip(x, y, value) {
                     <Bar dataKey="sales" fill="#007BFF" name="Sales" />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <p>No bar chart data available.</p>}
-            </div>
+              </ChartModal>
 
-            {/* Waterfall Chart */}
-            <div className="chart-box">
-              <button
-                className="chart-expand-btn"
-                title="Expand chart"
-                onClick={() => setExpandedChart("waterfall")}
-              >⛶</button>
-              <h4>Forecast Accuracy Impact by Product</h4>
-              {waterfallData.length > 0 ? (
-                <WaterfallChart data={waterfallData} />
-              ) : <p>No data available for waterfall chart.</p>}
-            </div>
+              <ChartModal open={expandedChart === "waterfall"} onClose={() => setExpandedChart(null)}>
+                <h3>Forecast Accuracy Impact by Product</h3>
+                <div style={{ width: "100%", height: "calc(100% - 2.5rem)" }}>
+                  <WaterfallChart data={waterfallData} />
+                </div>
+              </ChartModal>
 
-            {/* Pie Chart */}
-            <div className="chart-box">
-              <button
-                className="chart-expand-btn"
-                title="Expand chart"
-                onClick={() => setExpandedChart("pie")}
-              >⛶</button>
-              <h4>Forecast Accuracy Distribution</h4>
-              {pieDataAll.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
+              <ChartModal open={expandedChart === "pie"} onClose={() => setExpandedChart(null)}>
+                <h3>Forecast Accuracy Distribution</h3>
+                <ResponsiveContainer width="100%" height={500}>
                   <PieChart>
                     <Pie
                       data={pieDataAll}
                       cx="50%"
                       cy="50%"
-                      outerRadius={100}
+                      outerRadius={180}
                       fill="#8884d8"
                       dataKey="value"
                       label={({ name, value }) => `${name}: ${value}%`}
@@ -459,68 +523,8 @@ function cellTooltip(x, y, value) {
                     <Legend />
                   </PieChart>
                 </ResponsiveContainer>
-              ) : <p>No pie chart data available.</p>}
+              </ChartModal>
             </div>
-            {/* --- Modals for Expanding Each Chart --- */}
-            <ChartModal open={expandedChart === "line"} onClose={() => setExpandedChart(null)}>
-              <h3>Historical vs Forecasted Demand</h3>
-              <ResponsiveContainer width="100%" height={500}>
-                <LineChart data={lineData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis tickFormatter={value => `${value.toLocaleString()}`} />
-                  <Tooltip formatter={value => `${value.toLocaleString()}`} />
-                  <Legend />
-                  <Line type="monotone" dataKey="value" stroke="#002855" name="Actual" strokeWidth={2} />
-                  <Line type="monotone" dataKey="forecast" stroke="#00509E" name="Forecast" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartModal>
-
-            <ChartModal open={expandedChart === "bar"} onClose={() => setExpandedChart(null)}>
-              <h3>Product Sales Bar Chart</h3>
-              <ResponsiveContainer width="100%" height={500}>
-                <BarChart data={barData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="sales" fill="#007BFF" name="Sales" />
-                </BarChart>
-              </ResponsiveContainer>
-            </ChartModal>
-
-            <ChartModal open={expandedChart === "waterfall"} onClose={() => setExpandedChart(null)}>
-              <h3>Forecast Accuracy Impact by Product</h3>
-              <div style={{ width: "100%", height: "calc(100% - 2.5rem)" }}>
-                <WaterfallChart data={waterfallData} />
-              </div>
-            </ChartModal>
-
-            <ChartModal open={expandedChart === "pie"} onClose={() => setExpandedChart(null)}>
-              <h3>Forecast Accuracy Distribution</h3>
-              <ResponsiveContainer width="100%" height={500}>
-                <PieChart>
-                  <Pie
-                    data={pieDataAll}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={180}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}%`}
-                    labelLine={true}
-                  >
-                    {pieDataAll.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            </ChartModal>
           </div>
         </div>
       </div>

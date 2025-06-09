@@ -3,10 +3,13 @@ import { Navbar, Container, Nav, Form, FormControl } from "react-bootstrap";
 import { FaBell, FaCog, FaUser } from "react-icons/fa";
 import { Link } from "react-router-dom"; // Import Link for navigation
 import Cookies from 'js-cookie'; // Import Cookies to access cookie data
-import "../App.css"; 
+import NotificationPopup from "./Notifications";
+import "../App.css";
+import logo from '../assets/images/Data analysis concept illustration (1).png';
 
 function CustomNavbar() {
   const [username, setUsername] = useState("");
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // Fetch username from cookie on component mount
   useEffect(() => {
@@ -19,12 +22,17 @@ function CustomNavbar() {
     console.log('Username from cookie in Navbar:', storedUsername);
   }, []);
 
+  const toggleNotifications = (e) => {
+    e.preventDefault();
+    setShowNotifications(!showNotifications);
+  };
+
   return (
     <Navbar expand="lg" className="custom-navbar">
       <Container fluid>
         {/* Left Side: Logo */}
         <Navbar.Brand href="#home" className="navbar-logo">
-          4kast.ai<span className="red-dot"></span>
+          <img src={logo} alt="4kast.ai Logo" className="navbar-logo" />
         </Navbar.Brand>
 
         {/* Center: Search Bar */}
@@ -38,7 +46,10 @@ function CustomNavbar() {
 
         {/* Right Side: Icons */}
         <Nav className="navbar-icons">
-          <Link to="/notifications" className="icon-link"><FaBell className="icon" /></Link>
+          <div className="notification-container">
+            <FaBell className="icon bell-icon" onClick={toggleNotifications} />
+            {showNotifications && <NotificationPopup togglePopup={toggleNotifications} />}
+          </div>
           <Link to="/settings" className="icon-link"><FaCog className="icon" /></Link>
           <Link to="/profile" className="icon-link">
             <div className="user-profile">
