@@ -48,6 +48,7 @@ from pydantic import BaseModel
 import seaborn as sns
 import plotly.express as px
 from .config import OrganizationCalendarConfig
+import pprint
 
 
 
@@ -360,7 +361,7 @@ async def run_forecast(request: Request, current_user: str = Depends(get_current
         forecast_horizon: int = int(data.get("forecastHorizon", 30))
         time_bucket: str = data.get("timeBucket", "Daily")
         forecast_lock: int = int(data.get("forecastLock", 0))
-        selected_models: List[str] = data.get("selectedModels", ["ARIMA", "SARIMA", "Prophet"])
+        selected_models: List[str] = data.get("selectedModels", [])
         time_dependent_variables: List[str] = data.get("timeDependentVariables", [])
         column_mappings: Dict = data.get("columnMappings", {})
 
@@ -383,8 +384,16 @@ async def run_forecast(request: Request, current_user: str = Depends(get_current
                 forecast_lock,
                 column_mappings
             )
+            
+            # --- LOGGING: Print the raw result ---
+            print("\n--- RUN_FORECAST_FOR_FILE RAW RESULT ---")
+            pprint.pprint(result)
+
 
             serializable_result = make_json_serializable(result)
+            # --- LOGGING: Print the serializable result ---
+            print("\n--- RUN_FORECAST_FOR_FILE SERIALIZABLE RESULT ---")
+            pprint.pprint(serializable_result)
             try:
                 json.dumps(serializable_result)  # test if serializable
                 return JSONResponse(content=serializable_result, status_code=200)
@@ -540,7 +549,7 @@ def infer_frequency(df, date_col='Date'):
 
 # Function to detect seasonality
 def detect_seasonality(df, max_lags=50):
-    st.write("### Seasonality Detection")
+    logging.info("### Seasonality Detection Started")
 
     if len(df) < 4:  # Arbitrary minimum threshold for meaningful analysis
         logging.warning(f"Dataset too small ({len(df)} rows) for seasonality detection. Defaulting to period=7.")
@@ -567,7 +576,7 @@ def detect_seasonality(df, max_lags=50):
     plot_acf(df['Demand'], lags=max_lags, ax=ax1)
     plot_pacf(df['Demand'], lags=max_lags, ax=ax2)
     plt.tight_layout()
-    st.pyplot(fig)
+    plt.show()
     
     # Perform seasonal decomposition with different potential periods
     best_period = None
@@ -590,7 +599,7 @@ def detect_seasonality(df, max_lags=50):
             decomposition.seasonal.plot(ax=ax3, title='Seasonal')
             decomposition.resid.plot(ax=ax4, title='Residual')
             plt.tight_layout()
-            st.pyplot(fig)
+            plt.show()
             
             # Update best period if this decomposition has lower residual variance
             if residual_variance < min_residual_variance:
@@ -630,13 +639,11 @@ def detect_seasonality(df, max_lags=50):
     if potential_periods:
         best_period = min(potential_periods)  
     
-    st.write(f"""
-    ### Seasonality Analysis Results:
-    - Best detected period: {best_period}
-    - Data frequency: {date_freq}
-    - Potential periods from ACF: {potential_periods}
-    - Frequency-based suggestion: {freq_based_period}
-    """)
+    logging.info("### Seasonality Analysis Results:")
+    logging.info(f"- Best detected period: {best_period}")
+    logging.info(f"- Data frequency: {date_freq}")
+    logging.info(f"- Potential periods from ACF: {potential_periods}")
+    logging.info(f"- Frequency-based suggestion: {freq_based_period}")
     
     return best_period
 
@@ -1346,9 +1353,6 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
         # Initialize future_forecasts with item structure
         for item in unique_items:
             future_forecasts[item] = {}
-        
-        # Process each item individually
-        for item in unique_items:
             item_df = df_copy[df_copy[item_col] == item].copy()
             
             if len(item_df) < 2:
@@ -1827,8 +1831,7 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
                     
                     # Display feature importance if available
                     if 'feature_importance' in rf_metrics:
-                        st.write("### Random Forest Feature Importance")
-                        st.dataframe(rf_metrics['feature_importance'])
+                        logging.info(f"Feature Importance: {rf_metrics['feature_importance']}")                       
                 else:
                     results['Random Forest'] = str(rf_metrics)
             except Exception as e:
@@ -1848,9 +1851,6 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
             croston_metrics, croston_forecast = croston_model(train, val, test, alpha=0.4,  horizon=horizon)  
             results['Croston'] = croston_metrics
             future_forecasts['Croston'] = croston_forecast
-
-            # Croston Historical vs. Predicted Chart
-            st.write("### Croston Forecast Trend")
 
         #GRU
         if 'GRU' in selected_models:
@@ -1881,13 +1881,13 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
                             freq=freq
                         )
                         
-                        st.write("### Gaussian Process Prediction Uncertainties")
+                        
                         uncertainty_df = pd.DataFrame({
                             'Date': future_dates,
                             'Prediction': gp_forecast,
                             'Uncertainty': gp_metrics['uncertainties']
                         })
-                        st.dataframe(uncertainty_df)
+                        logging.info(f"Gaussian Process uncertainties:\n{uncertainty_df}")
                         
                         # Plot predictions with uncertainty bands
                         fig = go.Figure()
@@ -1920,7 +1920,7 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
                             yaxis_title='Demand',
                             hovermode='x'
                         )
-                        st.plotly_chart(fig)
+                        fig.show()
                 else:
                     results['Gaussian Process'] = str(gp_metrics)
             except Exception as e:
@@ -2330,23 +2330,78 @@ def split_and_bulk_insert(conn, df_hist, df_forecast, forecast_id):
     )
     print(f"Inserted {hist_count} historical rows and {fcst_count} forecast rows for forecast_id={forecast_id}")
     
-# Dummy placeholders for your actual logic
+
+def find_best_fit(results: dict, forecast_type: str, metric: str = "MAE"):
+    """
+    Finds the best fitting model based on a MAE on the validation set.
+    """
+    best_fit_summary = {}
+    metric_name = "MAE"
+    metric_index = 2
+
+    if forecast_type == "Overall":
+        lowest_error = float('inf')
+        best_model_name = "None"
+        for model_name, metrics in results.items():
+            if not isinstance(metrics, dict) or 'val' not in metrics or not metrics['val']:
+                continue
+            validation_score = metrics['val'][metric_index]
+            if validation_score is not None and validation_score < lowest_error:
+                lowest_error = validation_score
+                best_model_name = model_name
+        best_fit_summary = {
+            "best_model": best_model_name,
+            "metric": metric_name,
+            "validation_score": lowest_error if lowest_error != float('inf') else None
+        }
+    else:
+        best_fit_per_item = {}
+        items = {}
+        for key, metrics in results.items():
+            if not isinstance(metrics, dict): continue
+            try:
+                model_name, item_id = key.rsplit('_', 1)
+                if item_id not in items:
+                    items[item_id] = {}
+                items[item_id][model_name] = metrics
+            except ValueError:
+                logging.warning(f"Could not parse model/item from key: {key}")
+                continue
+        for item_id, item_models in items.items():
+            lowest_error = float('inf')
+            best_model_name = "None"
+            for model_name, metrics in item_models.items():
+                if 'val' not in metrics or not metrics['val']:
+                    continue
+                validation_score = metrics['val'][metric_index]
+                if validation_score is not None and validation_score < lowest_error:
+                    lowest_error = validation_score
+                    best_model_name = model_name
+            best_fit_per_item[item_id] = {
+                "best_model": best_model_name,
+                "metric": metric_name,
+                "validation_score": lowest_error if lowest_error != float('inf') else None
+            }
+        best_fit_summary = best_fit_per_item
+    return best_fit_summary
+
+
+# Running the forecast for the file -> 
 def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, selected_models, time_dependent_variables, time_bucket, forecast_lock, column_mappings):
     """Run forecasting on a file using the specified parameters"""
     try:
-    
         with conn.cursor() as cur:
             cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
             models = [row[0] for row in cur.fetchall()]
         # return {"models":models}
-        available_model_namess = models
+        available_model_names = models
     
         # Set default models if none provided
         if selected_models is None or not selected_models:
-            selected_models = ["ARIMA", "SARIMA", "Prophet"]
+            selected_models = available_model_names
         
         # Validate selected models against available models
-        available_model_names = [model for model in available_model_namess]
+        available_model_names = [model for model in available_model_names]
         invalid_models = [model for model in selected_models if model not in available_model_names]
         if invalid_models:
             raise ValueError(f"Invalid model(s) selected: {invalid_models}. Available models are: {available_model_names}")
@@ -2357,6 +2412,16 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
             raise ValueError("No valid models selected for forecasting")
         
         print(f"Using validated models: {selected_models}")
+        
+        # BEST-FIT START
+        is_best_fit_mode = not selected_models or len(selected_models) == 0
+        if is_best_fit_mode:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
+                selected_models = [row[0] for row in cur.fetchall()]
+            print(f"Best Fit mode: running all models: {selected_models}")
+        else:
+            print(f"Running selected models: {selected_models}")
         
         # Check if metadata file exists for this file
         metadata_path = os.path.join(UPLOAD_DIR, os.path.splitext(os.path.basename(file_path))[0] + "_metadata.json")
@@ -2639,6 +2704,31 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
             horizon=forecast_horizon
         )
         
+        best_fit_summary = None
+        if is_best_fit_mode:
+            best_fit_summary = find_best_fit(results, forecast_type)
+            filtered_results = {}
+            filtered_forecasts = {}
+
+            if forecast_type == "Overall":
+                best_model = best_fit_summary.get("best_model")
+                if best_model in results:
+                    filtered_results[best_model] = results[best_model]
+                    filtered_forecasts[best_model] = future_forecasts[best_model]
+            else:
+                for item_id, info in best_fit_summary.items():
+                    best_model = info.get("best_model")
+                    key = f"{best_model}_{item_id}"
+                    if key in results:
+                        filtered_results[key] = results[key]
+                    if item_id in future_forecasts and best_model in future_forecasts[item_id]:
+                        if item_id not in filtered_forecasts:
+                            filtered_forecasts[item_id] = {}
+                        filtered_forecasts[item_id][best_model] = future_forecasts[item_id][best_model]
+        else:
+            filtered_results = results
+            filtered_forecasts = future_forecasts
+        
         # Convert dates to serializable format if needed
         if isinstance(dates, pd.Series) or isinstance(dates, pd.DatetimeIndex):
             dates_list = dates.tolist()
@@ -2648,8 +2738,9 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         # Make all results JSON-serializable
         response_data = {
             "status": "success",
-            "results": make_json_serializable(results),
-            "future_forecasts": make_json_serializable(future_forecasts),
+            "best_fit_summary": make_json_serializable(best_fit_summary),
+            "results": make_json_serializable(filtered_results),
+            "future_forecasts": make_json_serializable(filtered_forecasts),
             "dates": make_json_serializable(dates_list),
             "forecast_type": forecast_type,  # Include the forecast type in the response
             "config": {
@@ -2661,6 +2752,12 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                 "column_mappings": column_mappings
             }
         }
+        
+        print("Returning forecast response with keys:", list(response_data.keys()))
+        print("Best fit summary:", response_data.get('best_fit_summary', {}))
+        print("Forecast type:", response_data.get('forecast_type'))
+
+        pprint.pprint(response_data['best_fit_summary'])
         
         # For item-wise or store-item forecasts, add item identifiers to the CSV-ready format
         if forecast_type in ["Item-wise", "Store-Item Combination"]:
@@ -2700,18 +2797,27 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                     print(f"first_key: {first_key}")
                     print(f"first value type: {type(future_forecasts[first_key])}")
                 
-                # Adapt the forecast structure to handle different formats
-                adapted_forecasts = adapt_forecast_structure(future_forecasts, forecast_type, selected_models, results)
+                results_for_db = results
+                forecasts_for_db = future_forecasts
                 
-                csv_data = transform_forecasts_for_csv(
-                    results, adapted_forecasts, dates_list, forecast_type, future_dates
+                # 1. FILTERED version for the UI (best-fit)
+                adapted_forecasts = adapt_forecast_structure(filtered_forecasts, forecast_type, selected_models, filtered_results)
+                csv_data_filtered = transform_forecasts_for_csv(
+                    filtered_results, adapted_forecasts, dates_list, forecast_type, future_dates
                 )
-                # Attach val metrics
-                csv_data = attach_val_metrics_to_csv_rows(csv_data, results, forecast_type)
-                response_data["csv_data"] = make_json_serializable(csv_data)
+                csv_data_filtered = attach_val_metrics_to_csv_rows(csv_data_filtered, filtered_results, forecast_type)
+                response_data["csv_data"] = make_json_serializable(csv_data_filtered)
+
+                # 2. UNFILTERED version for the DB (ALL models)
+                adapted_forecasts_db = adapt_forecast_structure(future_forecasts, forecast_type, selected_models, results)
+                csv_data_for_db = transform_forecasts_for_csv(
+                    results, adapted_forecasts_db, dates_list, forecast_type, future_dates
+                )
+                csv_data_for_db = attach_val_metrics_to_csv_rows(csv_data_for_db, results, forecast_type)
+
 
                 with conn.cursor() as cur:
-                    forecast_json = json.dumps(response_data["csv_data"])
+                    forecast_json = json.dumps(make_json_serializable(csv_data_for_db))
                     cur.execute(
                         '''
                         INSERT INTO "DBADMIN"."FINAL_FORECASTS" ("FORECASTDATA")
@@ -2727,7 +2833,7 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                 df_hist = df.copy()
                 df_hist = df_hist[["ProductID", "StoreID", "Date", "Demand"]].dropna(subset=["Demand"])  # filter for valid demand
 
-                df_forecast = pd.DataFrame(csv_data)
+                df_forecast = pd.DataFrame(csv_data_for_db)
                 split_and_bulk_insert(conn, df_hist, df_forecast, forecast_id)
                        
             except Exception as e:
@@ -2766,8 +2872,9 @@ def make_json_serializable(obj):
     elif isinstance(obj, (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64,
                         np.uint8, np.uint16, np.uint32, np.uint64)):
         return int(obj)
-    elif isinstance(obj, (np.float64, np.float16, np.float32, np.float64)):
+    elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
         return float(obj)
+
     elif isinstance(obj, pd.Series):
         return make_json_serializable(obj.tolist())
     elif isinstance(obj, np.bool_):

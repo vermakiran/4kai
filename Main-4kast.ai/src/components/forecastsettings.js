@@ -738,6 +738,7 @@ const ForecastSettings = () => {
         timeDependentVariables: timeDependentVariables,
         columnMappings: columnMappings
       };
+      debugger;
 
       showAlert("Running forecast model...", "info");
 
@@ -1757,9 +1758,7 @@ const ForecastSettings = () => {
                     const entries = Object.entries(forecastResults.future_forecasts || {});
                     return entries.map(([productId, modelForecasts]) => {
                       const isNestedStructure = typeof modelForecasts === 'object' && !Array.isArray(modelForecasts);
-                      const modelNames = isNestedStructure 
-                        ? Object.keys(modelForecasts) 
-                        : [selectedModel || "Forecast"];
+                      const modelNames = Object.keys(modelForecasts);
 
                       return (
                         <div key={productId} id={`item-forecast-${productId}`} className="item-forecast">
@@ -1769,6 +1768,12 @@ const ForecastSettings = () => {
                             productId === "aggregated" ? "Aggregated Data" : 
                             productId
                           }</h5>
+                          {/* Add the message here */}
+                          {forecastMethod === "Best Fit" && modelNames.length === 1 && (
+                            <div style={{ color: "#008000", fontWeight: "500", marginBottom: "6px" }}>
+                              Showing best-fit model: <b>{modelNames[0]}</b>
+                            </div>
+                          )}
                           <table>
                             <thead>
                               <tr>
@@ -1886,15 +1891,19 @@ const ForecastSettings = () => {
                       const isNestedStructure = typeof modelForecasts === 'object' && !Array.isArray(modelForecasts);
                       
                       // Get model names based on structure
-                      const modelNames = isNestedStructure 
-                        ? Object.keys(modelForecasts) 
-                        : [selectedModel || "Forecast"];
+                      const modelNames = Object.keys(modelForecasts);
                       
                       console.log(`Combo ${comboId} modelNames:`, modelNames);
                       
                       return (
                         <div key={comboId} id={`combo-forecast-${comboId}`} className="combo-forecast">
                           <h5>{displayTitle}</h5>
+                          {/* Add the message here */}
+                          {forecastMethod === "Best Fit" && modelNames.length === 1 && (
+                            <div style={{ color: "#008000", fontWeight: "500", marginBottom: "6px" }}>
+                              Showing best-fit model: <b>{modelNames[0]}</b>
+                            </div>
+                          )}
                           <table>
                             <thead>
                               <tr>
