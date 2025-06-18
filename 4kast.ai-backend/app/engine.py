@@ -1963,7 +1963,7 @@ def safe_forecast_models(df, selected_models, additional_cols=None, item_col=Non
         raise e
     
 # Function to detect and adapt forecast data structure based on model
-def adapt_forecast_structure(future_forecasts, forecast_type, selected_models=None, results=None):
+def adapt_forecast_structure(future_forecasts, forecast_type, selected_models=None, results=None, is_best_fit=False):
     """
     Adapts the forecast data structure to a standard format based on what's detected.
     Handles special cases like Prophet model results.
@@ -1978,6 +1978,8 @@ def adapt_forecast_structure(future_forecasts, forecast_type, selected_models=No
         The models that were selected for forecasting
     results : dict, optional
         The results dictionary from forecast_models function
+    is_best_fit : bool, optional
+        Whether we're in Best Fit mode
         
     Returns:
     --------
@@ -2014,59 +2016,68 @@ def adapt_forecast_structure(future_forecasts, forecast_type, selected_models=No
     # Create a copy to avoid modifying the original
     adapted_forecasts = {}
     
+    # Get best fit models if in best fit mode
+    best_fits = None
+    if is_best_fit and results:
+        best_fits = find_best_fit(results, forecast_type)
+        print(f"Best fit models determined: {best_fits}")
+    
     # Handle Prophet special case for Overall forecasts (single level)
     if forecast_type == "Overall":
-        for model_name, forecasts in future_forecasts.items():
-            if isinstance(forecasts, dict):
-                # For nested dictionaries (like Prophet might produce)
-                adapted_forecasts[model_name] = {}
-                for sub_key, sub_forecasts in forecasts.items():
-                    # Ensure sub_forecasts is a list
-                    if not isinstance(sub_forecasts, list):
-                        sub_forecasts = [float(sub_forecasts)]
-                    adapted_forecasts[model_name][sub_key] = sub_forecasts
-            else:
-                # For direct list forecasts
-                # Ensure forecasts is a list
-                if not isinstance(forecasts, list):
-                    forecasts = [float(forecasts)]
-                adapted_forecasts[model_name] = forecasts
+        if is_best_fit and best_fits:
+            best_model = best_fits.get("best_model")
+            if best_model and best_model in future_forecasts:
+                adapted_forecasts[best_model] = future_forecasts[best_model]
+        else:
+            for model_name, forecasts in future_forecasts.items():
+                if isinstance(forecasts, dict):
+                    adapted_forecasts[model_name] = {}
+                    for sub_key, sub_forecasts in forecasts.items():
+                        if not isinstance(sub_forecasts, list):
+                            sub_forecasts = [float(sub_forecasts)]
+                        adapted_forecasts[model_name][sub_key] = sub_forecasts
+                else:
+                    if not isinstance(forecasts, list):
+                        forecasts = [float(forecasts)]
+                    adapted_forecasts[model_name] = forecasts
                 
     # Handle Prophet special case for Item-wise forecasts (two levels)
     elif forecast_type == "Item-wise":
         for item_id, item_forecasts in future_forecasts.items():
             adapted_forecasts[item_id] = {}
-            # Check if item_forecasts is already a dictionary
-            if isinstance(item_forecasts, dict):
-                for model_name, forecasts in item_forecasts.items():
-                    # Ensure forecasts is a list
-                    if not isinstance(forecasts, list):
-                        forecasts = [float(forecasts)]
-                    adapted_forecasts[item_id][model_name] = forecasts
+            if is_best_fit and best_fits and item_id in best_fits:
+                best_model = best_fits[item_id].get("best_model")
+                if best_model and isinstance(item_forecasts, dict) and best_model in item_forecasts:
+                    adapted_forecasts[item_id][best_model] = item_forecasts[best_model]
             else:
-                # If it's not a dict, ensure it's a list
-                if not isinstance(item_forecasts, list):
-                    item_forecasts = [float(item_forecasts)]
-                # If it's a list, create a "Default" model for it
-                adapted_forecasts[item_id]["Default"] = item_forecasts
+                if isinstance(item_forecasts, dict):
+                    for model_name, forecasts in item_forecasts.items():
+                        if not isinstance(forecasts, list):
+                            forecasts = [float(forecasts)]
+                        adapted_forecasts[item_id][model_name] = forecasts
+                else:
+                    if not isinstance(item_forecasts, list):
+                        item_forecasts = [float(item_forecasts)]
+                    adapted_forecasts[item_id]["Default"] = item_forecasts
             
     # Handle Prophet special case for Store-Item Combination forecasts (two levels)
     elif forecast_type == "Store-Item Combination":
         for combo_id, combo_forecasts in future_forecasts.items():
             adapted_forecasts[combo_id] = {}
-            # Check if combo_forecasts is already a dictionary
-            if isinstance(combo_forecasts, dict):
-                for model_name, forecasts in combo_forecasts.items():
-                    # Ensure forecasts is a list
-                    if not isinstance(forecasts, list):
-                        forecasts = [float(forecasts)]
-                    adapted_forecasts[combo_id][model_name] = forecasts
+            if is_best_fit and best_fits and combo_id in best_fits:
+                best_model = best_fits[combo_id].get("best_model")
+                if best_model and isinstance(combo_forecasts, dict) and best_model in combo_forecasts:
+                    adapted_forecasts[combo_id][best_model] = combo_forecasts[best_model]
             else:
-                # If it's not a dict, ensure it's a list
-                if not isinstance(combo_forecasts, list):
-                    combo_forecasts = [float(combo_forecasts)]
-                # If it's a list, create a "Default" model for it
-                adapted_forecasts[combo_id]["Default"] = combo_forecasts
+                if isinstance(combo_forecasts, dict):
+                    for model_name, forecasts in combo_forecasts.items():
+                        if not isinstance(forecasts, list):
+                            forecasts = [float(forecasts)]
+                        adapted_forecasts[combo_id][model_name] = forecasts
+                else:
+                    if not isinstance(combo_forecasts, list):
+                        combo_forecasts = [float(combo_forecasts)]
+                    adapted_forecasts[combo_id]["Default"] = combo_forecasts
                 
     return adapted_forecasts
 
@@ -2704,31 +2715,6 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
             horizon=forecast_horizon
         )
         
-        best_fit_summary = None
-        if is_best_fit_mode:
-            best_fit_summary = find_best_fit(results, forecast_type)
-            filtered_results = {}
-            filtered_forecasts = {}
-
-            if forecast_type == "Overall":
-                best_model = best_fit_summary.get("best_model")
-                if best_model in results:
-                    filtered_results[best_model] = results[best_model]
-                    filtered_forecasts[best_model] = future_forecasts[best_model]
-            else:
-                for item_id, info in best_fit_summary.items():
-                    best_model = info.get("best_model")
-                    key = f"{best_model}_{item_id}"
-                    if key in results:
-                        filtered_results[key] = results[key]
-                    if item_id in future_forecasts and best_model in future_forecasts[item_id]:
-                        if item_id not in filtered_forecasts:
-                            filtered_forecasts[item_id] = {}
-                        filtered_forecasts[item_id][best_model] = future_forecasts[item_id][best_model]
-        else:
-            filtered_results = results
-            filtered_forecasts = future_forecasts
-        
         # Convert dates to serializable format if needed
         if isinstance(dates, pd.Series) or isinstance(dates, pd.DatetimeIndex):
             dates_list = dates.tolist()
@@ -2738,9 +2724,8 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         # Make all results JSON-serializable
         response_data = {
             "status": "success",
-            "best_fit_summary": make_json_serializable(best_fit_summary),
-            "results": make_json_serializable(filtered_results),
-            "future_forecasts": make_json_serializable(filtered_forecasts),
+            "results": make_json_serializable(results),
+            "future_forecasts": adapt_forecast_structure(future_forecasts, forecast_type, selected_models, results, is_best_fit=is_best_fit_mode),
             "dates": make_json_serializable(dates_list),
             "forecast_type": forecast_type,  # Include the forecast type in the response
             "config": {
@@ -2754,10 +2739,7 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         }
         
         print("Returning forecast response with keys:", list(response_data.keys()))
-        print("Best fit summary:", response_data.get('best_fit_summary', {}))
         print("Forecast type:", response_data.get('forecast_type'))
-
-        pprint.pprint(response_data['best_fit_summary'])
         
         # For item-wise or store-item forecasts, add item identifiers to the CSV-ready format
         if forecast_type in ["Item-wise", "Store-Item Combination"]:
@@ -2787,72 +2769,35 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                         if isinstance(value, dict):
                             for sub_key, sub_value in value.items():
                                 print(f"    sub_key: {sub_key}, sub_value type: {type(sub_value)}")
-                                if isinstance(sub_value, (list, tuple)) and len(sub_value) > 0:
-                                    print(f"      first element type: {type(sub_value[0])}")
-                        elif isinstance(value, (list, tuple)) and len(value) > 0:
-                            print(f"    first element type: {type(value[0])}")
                 
-                if isinstance(future_forecasts, dict) and len(future_forecasts) > 0:
-                    first_key = next(iter(future_forecasts))
-                    print(f"first_key: {first_key}")
-                    print(f"first value type: {type(future_forecasts[first_key])}")
-                
-                results_for_db = results
-                forecasts_for_db = future_forecasts
-                
-                # 1. FILTERED version for the UI (best-fit)
-                adapted_forecasts = adapt_forecast_structure(filtered_forecasts, forecast_type, selected_models, filtered_results)
-                csv_data_filtered = transform_forecasts_for_csv(
-                    filtered_results, adapted_forecasts, dates_list, forecast_type, future_dates
+                # Transform forecasts to CSV format
+                csv_data = transform_forecasts_for_csv(
+                    results,
+                    future_forecasts,
+                    dates_list,
+                    forecast_type,
+                    future_dates=future_dates
                 )
-                csv_data_filtered = attach_val_metrics_to_csv_rows(csv_data_filtered, filtered_results, forecast_type)
-                response_data["csv_data"] = make_json_serializable(csv_data_filtered)
-
-                # 2. UNFILTERED version for the DB (ALL models)
-                adapted_forecasts_db = adapt_forecast_structure(future_forecasts, forecast_type, selected_models, results)
-                csv_data_for_db = transform_forecasts_for_csv(
-                    results, adapted_forecasts_db, dates_list, forecast_type, future_dates
-                )
-                csv_data_for_db = attach_val_metrics_to_csv_rows(csv_data_for_db, results, forecast_type)
-
-
-                with conn.cursor() as cur:
-                    forecast_json = json.dumps(make_json_serializable(csv_data_for_db))
-                    cur.execute(
-                        '''
-                        INSERT INTO "DBADMIN"."FINAL_FORECASTS" ("FORECASTDATA")
-                        VALUES (?)
-                        ''',
-                        (forecast_json,)
-                    )
-                    conn.commit()
-                    # Fetch the auto-generated FORECASTID
-                    cur.execute('SELECT CURRENT_IDENTITY_VALUE() FROM "DBADMIN"."FINAL_FORECASTS"')
-                    forecast_id = cur.fetchone()[0]
-
-                df_hist = df.copy()
-                df_hist = df_hist[["ProductID", "StoreID", "Date", "Demand"]].dropna(subset=["Demand"])  # filter for valid demand
-
-                df_forecast = pd.DataFrame(csv_data_for_db)
-                split_and_bulk_insert(conn, df_hist, df_forecast, forecast_id)
-                       
+                
+                # Attach validation metrics to CSV rows
+                csv_data = attach_val_metrics_to_csv_rows(csv_data, results, forecast_type)
+                
+                # Add CSV data to response
+                response_data["csv_data"] = csv_data
+                
             except Exception as e:
+                print(f"Error preparing CSV data: {str(e)}")
                 import traceback
-                print(f"Error generating CSV data: {str(e)}")
-                print(traceback.format_exc())
-                # Continue without CSV data
-                response_data["csv_error"] = str(e)
-            
+                traceback.print_exc()
+                response_data["csv_data"] = []
+        
         return response_data
+        
     except Exception as e:
-        print(f"Error running forecast: {str(e)}")
-        print(f"Error details: {type(e).__name__}")
+        print(f"Error in run_forecast_for_file: {str(e)}")
         import traceback
         traceback.print_exc()
-        return {
-            "status": "error",
-            "message": f"Error running forecast: {str(e)}"
-        }
+        raise e
 
 
 def make_json_serializable(obj):

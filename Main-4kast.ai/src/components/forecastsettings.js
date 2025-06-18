@@ -1898,24 +1898,63 @@ const ForecastSettings = () => {
                       return (
                         <div key={comboId} id={`combo-forecast-${comboId}`} className="combo-forecast">
                           <h5>{displayTitle}</h5>
-                          {/* Add the message here */}
-                          {forecastMethod === "Best Fit" && modelNames.length === 1 && (
+                          {forecastMethod === "Best Fit" && (
                             <div style={{ color: "#008000", fontWeight: "500", marginBottom: "6px" }}>
-                              Showing best-fit model: <b>{modelNames[0]}</b>
+                              Showing best-fit model: <b>{
+                                // Find the best model based on test RMSE
+                                (() => {
+                                  const results = forecastResults.results || {};
+                                  let bestModel = modelNames[0];
+                                  let bestRMSE = Infinity;
+                                  
+                                  Object.entries(results).forEach(([model, metrics]) => {
+                                    // Remove store-item suffix from model name for comparison
+                                    const baseModelName = model.split('_')[0];
+                                    if (metrics.test && metrics.test[0] < bestRMSE) {
+                                      bestRMSE = metrics.test[0];
+                                      bestModel = baseModelName;
+                                    }
+                                  });
+                                  
+                                  return bestModel;
+                                })()
+                              }</b>
                             </div>
                           )}
                           <table>
                             <thead>
                               <tr>
                                 <th>Date</th>
-                                {modelNames.map(modelName => (
-                                  <th key={modelName}>{modelName}</th>
-                                ))}
+                                {forecastMethod === "Best Fit" ? 
+                                  [(() => {
+                                    const results = forecastResults.results || {};
+                                    let bestModel = modelNames[0];
+                                    let bestRMSE = Infinity;
+                                    
+                                    Object.entries(results).forEach(([model, metrics]) => {
+                                      // Remove store-item suffix from model name for comparison
+                                      const baseModelName = model.split('_')[0];
+                                      if (metrics.test && metrics.test[0] < bestRMSE) {
+                                        bestRMSE = metrics.test[0];
+                                        bestModel = baseModelName;
+                                      }
+                                    });
+                                    
+                                    return bestModel;
+                                  })()].map(modelName => (
+                                    <th key={modelName}>{modelName}</th>
+                                  ))
+                                  :
+                                  modelNames.map(modelName => {
+                                    // Remove store-item suffix for display
+                                    const baseModelName = modelName.split('_')[0];
+                                    return <th key={modelName}>{baseModelName}</th>;
+                                  })
+                                }
                               </tr>
                             </thead>
                             <tbody>
                               {Array.from({ length: parseInt(forecastHorizon) || 30 }).map((_, index) => {
-                                // Detect frequency and generate future dates from current date
                                 const dataFrequency = detectDataFrequency(forecastResults.dates);
                                 const futureDates = generateFutureDatesFromCurrent(parseInt(forecastHorizon) || 30, dataFrequency);
                                 const futureDate = futureDates[index];
@@ -1923,22 +1962,58 @@ const ForecastSettings = () => {
                                 return (
                                   <tr key={index}>
                                     <td>{futureDate ? futureDate.toISOString().split('T')[0] : `Future_${index + 1}`}</td>
-                                    {modelNames.map(modelName => {
-                                      // Get forecasts based on structure
-                                      const forecasts = isNestedStructure
-                                        ? modelForecasts[modelName]
-                                        : modelForecasts;
-                                      
-                                      return (
-                                        <td key={modelName}>
-                                          {Array.isArray(forecasts) && index < forecasts.length
-                                            ? typeof forecasts[index] === 'number'
-                                              ? forecasts[index].toFixed(2)
-                                              : forecasts[index]
-                                            : 'N/A'}
-                                        </td>
-                                      );
-                                    })}
+                                    {forecastMethod === "Best Fit" ? 
+                                      [(() => {
+                                        const results = forecastResults.results || {};
+                                        let bestModel = modelNames[0];
+                                        let bestRMSE = Infinity;
+                                        let bestModelFullName = modelNames[0];
+                                        
+                                        Object.entries(results).forEach(([model, metrics]) => {
+                                          // Remove store-item suffix for comparison
+                                          const baseModelName = model.split('_')[0];
+                                          if (metrics.test && metrics.test[0] < bestRMSE) {
+                                            bestRMSE = metrics.test[0];
+                                            bestModel = baseModelName;
+                                            bestModelFullName = model;
+                                          }
+                                        });
+                                        
+                                        // Find the matching model name in current combo's forecasts
+                                        const matchingModelName = modelNames.find(name => name.startsWith(bestModel));
+                                        return matchingModelName || bestModelFullName;
+                                      })()].map(modelName => {
+                                        const forecasts = isNestedStructure
+                                          ? modelForecasts[modelName]
+                                          : modelForecasts;
+                                        
+                                        return (
+                                          <td key={modelName}>
+                                            {Array.isArray(forecasts) && index < forecasts.length
+                                              ? typeof forecasts[index] === 'number'
+                                                ? forecasts[index].toFixed(2)
+                                                : forecasts[index]
+                                              : 'N/A'}
+                                          </td>
+                                        );
+                                      })
+                                      :
+                                      modelNames.map(modelName => {
+                                        const forecasts = isNestedStructure
+                                          ? modelForecasts[modelName]
+                                          : modelForecasts;
+                                        
+                                        return (
+                                          <td key={modelName}>
+                                            {Array.isArray(forecasts) && index < forecasts.length
+                                              ? typeof forecasts[index] === 'number'
+                                                ? forecasts[index].toFixed(2)
+                                                : forecasts[index]
+                                              : 'N/A'}
+                                          </td>
+                                        );
+                                      })
+                                    }
                                   </tr>
                                 );
                               })}
