@@ -43,6 +43,7 @@ from tensorflow.keras.layers import GRU, Dropout
 import tensorflow as tf
 import re
 from datetime import datetime, timedelta
+from datetime import date
 import glob
 from pydantic import BaseModel
 import seaborn as sns
@@ -3036,172 +3037,110 @@ async def download_file(
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# TODO:
-# - Needs further work on sync function API
- 
-@router.get("/dashboard-data12345")
-async def get_dashboard_data123(
-    current_user: str = Depends(get_current_user),
-    conn = Depends(get_hana_connection),
-    product: str = Query(None),
-    model: str = Query(None),
-    start: str = Query(None),
-    end: str = Query(None),
-    store: str = Query(None)
-):
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT MAX(RUNID) FROM DBADMIN.FORECASTDATA")
-            latest_runid = cur.fetchone()[0]
-            if not latest_runid:
-                latest_runid = 1
-
-            
-            cur.execute("""
-                SELECT MIN(FORECASTDATE), MAX(FORECASTDATE)
-                FROM DBADMIN.FORECASTDATA
-                WHERE RUNID = ?
-            """, (latest_runid,))
-            min_date, max_date = cur.fetchone()
-            min_date = str(min_date) if min_date else ""
-            max_date = str(max_date) if max_date else ""
-
-            
-            where_clauses = ["RUNID = ?"]
-            params = [latest_runid]
-            if product:
-                where_clauses.append("PRODUCTID = ?")
-                params.append(product)
-            if store:                                         
-                where_clauses.append("STOREID = ?")
-                params.append(store)
-            if start:
-                where_clauses.append("FORECASTDATE >= ?")
-                params.append(start)
-            if end:
-                where_clauses.append("FORECASTDATE <= ?")
-                params.append(end)
-            where_str = " AND ".join(where_clauses)
-
-            
-            cur.execute(f"SELECT COALESCE(SUM(PredictedDemand), 0) FROM DBADMIN.FORECASTDATA WHERE {where_str}", params)
-            total_demand = cur.fetchone()[0]
-
-            cur.execute(f"SELECT DISTINCT STOREID FROM DBADMIN.FORECASTDATA WHERE {where_str}", params)
-            store_list = [row[0] for row in cur.fetchall()]
-
-
-            cur.execute(f"SELECT AVG(MAPE), AVG(RMSE), AVG(Bias), AVG(MAE) FROM DBADMIN.FORECASTDATA WHERE {where_str} AND MAPE IS NOT NULL", params)
-            metrics = cur.fetchone()
-            mape = float(metrics[0]) if metrics[0] else 0
-            rmse = float(metrics[1]) if metrics[1] else 0
-            bias = float(metrics[2]) if metrics[2] else 0
-            mae = float(metrics[3]) if metrics[3] else 0
-            fva = 100 - mape if mape is not None else 0
-
-            
-            cur.execute(f"SELECT COUNT(DISTINCT PRODUCTID) FROM DBADMIN.FORECASTDATA WHERE {where_str}", params)
-            num_products = cur.fetchone()[0] or 0
-            cur.execute(f"SELECT DISTINCT PRODUCTID FROM DBADMIN.FORECASTDATA WHERE {where_str}", params)
-            product_list = [row[0] for row in cur.fetchall()]
-
-            
-            cur.execute(f"""
-                SELECT COALESCE(SUM(MAPE * PredictedDemand) / NULLIF(SUM(PredictedDemand), 0), 0)
-                FROM DBADMIN.FORECASTDATA
-                WHERE {where_str} AND MAPE IS NOT NULL
-            """, params)
-            weighted_mape = cur.fetchone()[0] or 0.0
-            weighted_mape = round(float(weighted_mape), 2)
-
-            
-            cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
-            model_list = [row[0] for row in cur.fetchall()]
-
-            
-            # Generate 24 months of data for line & scatter charts
-            months = []
-            now = datetime(2024, 1, 1)
-            for i in range(24):
-                dt = now + timedelta(days=30 * i)
-                month_name = dt.strftime("%b '%y")
-                months.append({
-                    "date": dt.strftime("%Y-%m-%d"),
-                    "name": month_name,
-                    "value": 250000 + i * 8000 + int((i % 5) * 10000),     # random-ish
-                    "forecast": 255000 + i * 8000 + int((i % 3) * 8000)
-                })
-
-            bar_data = []
-            for i in range(1, 8):
-                bar_data.append({
-                    "name": f"Product {chr(64 + i)}",
-                    "sales": 900000 - i * 80000 + (i * 4000),
-                    "growth": 20.0 - i * 1.5 + (i % 2) * 0.7
-                })
-
-            scatter_data = []
-            for i in range(24):
-                scatter_data.append({
-                    "x": i + 1,
-                    "y": 250000 + i * 8500 + int((i % 6) * 5000),
-                    "accuracy": 78 + (i % 7)
-                })
-
-            pie_data = [
-                {"name": "High Accuracy (>85%)", "value": 60},
-                {"name": "Medium Accuracy (70-85%)", "value": 30},
-                {"name": "Low Accuracy (<70%)", "value": 10}
-            ]
-
-            # 3 heatmap rows (H/Med/Low), 6 columns
-            heatmap_data = [
-                [98, 94, 91, 88, 85, 82],   # High
-                [80, 78, 76, 75, 72, 69],   # Medium
-                [67, 65, 62, 61, 59, 57],   # Low
-            ]
-
-            mock_chart_data = {
-                "lineData": months,
-                "barData": bar_data,
-                "scatterData": scatter_data,
-                "pieData": pie_data,
-                "heatmapData": heatmap_data,
-            }
-            
-        
-
-            # 9. Return everything
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "data": {
-                        "kpiData": {
-                            "total_demand": float(total_demand) if total_demand else 0,
-                            "mape": float(mape) if mape else 0,
-                            "rmse": float(rmse) if rmse else 0,
-                            "bias": float(bias) if bias else 0,
-                            "fva": float(fva),
-                            "num_products": int(num_products),
-                            "weighted_mape": float(weighted_mape),
-                            "latest_runid": int(latest_runid),
-                            "chartData": mock_chart_data,
-                        },
-                        "productList": product_list,
-                        "modelList": model_list,
-                        "storeList": store_list,
-                        "minDate": min_date,
-                        "maxDate": max_date
-                    }
-                }
-            )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Dashboard data fetch failed: {str(e)}")
-    
 @router.get("/dashboard-data")
 async def get_dashboard_data(
+    current_user: str = Depends(get_current_user),
+    conn=Depends(get_hana_connection),
+    product: Optional[str] = Query(None),
+    model: Optional[str] = Query(None),
+    start: Optional[date] = Query(None),
+    end: Optional[date] = Query(None),
+    store: Optional[str] = Query(None)
+):
+    with conn.cursor() as cur:
+        # Get latest FORECASTID
+        cur.execute("SELECT MAX(FORECASTID) FROM DBADMIN.FORECASTDATA")
+        row = cur.fetchone()
+        latest_forecastid = row[0] if row and row[0] is not None else 1
+
+        # 1. Get all distinct filter values (latest run only)
+        cur.execute("SELECT DISTINCT PRODUCTID FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
+        product_list = [row[0] for row in cur.fetchall()] or []
+        cur.execute("SELECT DISTINCT STOREID FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
+        store_list = [row[0] for row in cur.fetchall()] or []
+        cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
+        model_list = [row[0] for row in cur.fetchall()] or []
+
+        # Min/max dates for date pickers
+        cur.execute("""
+            SELECT MIN(FORECASTDATE), MAX(FORECASTDATE)
+            FROM DBADMIN.FORECASTDATA
+            WHERE FORECASTID = ? AND PREDICTEDDEMAND IS NOT NULL
+        """, (latest_forecastid,))
+        row = cur.fetchone()
+        min_date = str(row[0]) if row and row[0] else ""
+        max_date = str(row[1]) if row and row[1] else ""
+
+        # --- Apply filters ---
+        where_clauses = ["FORECASTID = ?"]
+        params = [latest_forecastid]
+        if product and product != "All":
+            where_clauses.append("PRODUCTID = ?")
+            params.append(product)
+        if store and store != "All":
+            where_clauses.append("STOREID = ?")
+            params.append(store)
+        if start:
+            where_clauses.append("FORECASTDATE >= ?")
+            params.append(str(start))
+        if end:
+            where_clauses.append("FORECASTDATE <= ?")
+            params.append(str(end))
+        where_str = " AND ".join(where_clauses)
+
+        # 2. KPIs
+        cur.execute(f"""
+            SELECT
+                COALESCE(SUM(PREDICTEDDEMAND), 0),
+                AVG(MAPE),
+                AVG(MAE),
+                AVG(BIAS),
+                COALESCE(SUM(MAPE * PREDICTEDDEMAND) / NULLIF(SUM(PREDICTEDDEMAND), 0), 0)
+            FROM DBADMIN.FORECASTDATA
+            WHERE {where_str}
+              AND PREDICTEDDEMAND IS NOT NULL
+        """, params)
+        row = cur.fetchone() or [0, 0, 0, 0, 0]
+        kpiData = {
+            "total_demand": float(row[0] or 0),
+            "mape": float(row[1] or 0),
+            "mae": float(row[2] or 0),
+            "forecast_bias": float(row[3] or 0),
+            "weighted_mape": float(row[4] or 0),
+        }
+
+        # 3. Timeseries chart data
+        cur.execute(f"""
+            SELECT FORECASTDATE, MAX(HISTORICALDEMAND) AS actual, MAX(PREDICTEDDEMAND) AS forecast
+            FROM DBADMIN.FORECASTDATA
+            WHERE {where_str}
+            GROUP BY FORECASTDATE
+            ORDER BY FORECASTDATE
+        """, params)
+        timeseries = [
+            {
+                "date": str(r[0]),
+                "actual": float(r[1]) if r[1] is not None else None,
+                "forecast": float(r[2]) if r[2] is not None else None
+            }
+            for r in cur.fetchall()
+        ]
+
+        return {
+            "filters": {
+                "productList": product_list,
+                "storeList": store_list,
+                "modelList": model_list,
+                "minDate": min_date,
+                "maxDate": max_date
+            },
+            "kpiData": kpiData,
+            "timeseries": timeseries
+        }
+
+
+
+async def get_dashboard_data12(
     current_user: str = Depends(get_current_user),
     conn = Depends(get_hana_connection),
     product: str = Query(None),

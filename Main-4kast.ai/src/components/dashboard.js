@@ -1,42 +1,62 @@
-import React, { useState, useMemo } from "react";
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
-import Paper from '@mui/material/Paper';
-import Dialog from '@mui/material/Dialog';
-import IconButton from '@mui/material/IconButton';
-import OpenInFullIcon from '@mui/icons-material/OpenInFull';
-import CloseIcon from '@mui/icons-material/Close';
-import { Typography, InputAdornment, TextField } from '@mui/material';
-import Button from '@mui/material/Button';
-import ButtonGroup from '@mui/material/ButtonGroup';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import GaugeChart from 'react-gauge-chart';
-import { ResponsiveLine } from '@nivo/line';
-import { format } from 'date-fns';
-import { ResponsiveBar } from '@nivo/bar';
-import { ResponsiveHeatMap } from '@nivo/heatmap';
-import { styled } from '@mui/material/styles';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import DateRangeIcon from '@mui/icons-material/DateRange';
-import PublicIcon from '@mui/icons-material/Public';
-import CategoryIcon from '@mui/icons-material/Category';
-import TodayIcon from '@mui/icons-material/Today';
+import React, { useEffect, useMemo, useState, useRef } from "react";
+
+// MUI Core & Theme
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import ButtonGroup from "@mui/material/ButtonGroup";
+import Dialog from "@mui/material/Dialog";
+import FormControl from "@mui/material/FormControl";
+import Grid from "@mui/material/Grid";
+import IconButton from "@mui/material/IconButton";
+import InputAdornment from "@mui/material/InputAdornment";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Paper from "@mui/material/Paper";
+import Select from "@mui/material/Select";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { DeviceHub as ModelIcon } from "@mui/icons-material";
+
+// MUI Icons
+import CloseIcon from "@mui/icons-material/Close";
+import DateRangeIcon from "@mui/icons-material/DateRange";
+import OpenInFullIcon from "@mui/icons-material/OpenInFull";
+import PublicIcon from "@mui/icons-material/Public";
+import CategoryIcon from "@mui/icons-material/Category";
+import TodayIcon from "@mui/icons-material/Today";
+
+// Lucide-react Icons
+import { AlertCircle, BarChart3, Target, TrendingUp } from "lucide-react";
+
+// Nivo Charts
+import { ResponsiveBar } from "@nivo/bar";
+import { ResponsiveHeatMap } from "@nivo/heatmap";
+import { ResponsiveLine } from "@nivo/line";
+
+// Other 3rd Party
+import GaugeChart from "react-gauge-chart";
+import Cookies from "js-cookie";
+
+// App Config
+import { DASHBOARD_ENDPOINT } from "./config";
+import { parseISO, format, isAfter, isBefore, isEqual, subDays, subMonths, startOfYear } from 'date-fns';
+
+
+
 
 function Dashboard({ children }) {
   return (
-    <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: 'background.default', p: 3 }}>
+    <Box sx={{ width: '100%', minHeight: '100vh', bgcolor: '#ffffff', p: 3 }}>
       <Box sx={{ maxWidth: '1800px', margin: '0 auto', '& > * + *': { mt: 3 } }}>{children}</Box>
     </Box>
+    
   );
 }
 
 // ChartCard with expand logic
-function ChartCard({ title, children }) {
+function ChartCard({ title, children, onExpand }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -44,6 +64,18 @@ function ChartCard({ title, children }) {
         <IconButton size="small" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }} onClick={() => setOpen(true)} aria-label={`Expand ${title}`}>
           <OpenInFullIcon fontSize="small" />
         </IconButton>
+
+        {onExpand && (
+          <IconButton
+            size="small"
+            sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }}
+            onClick={onExpand}
+            aria-label={`Expand ${title}`}
+          >
+            <OpenInFullIcon fontSize="small" />
+          </IconButton>
+        )}
+
         {children}
       </Paper>
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="lg" fullWidth>
@@ -58,119 +90,132 @@ function ChartCard({ title, children }) {
   );
 }
 
+function ChartWrapper({ children }) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+  return children;
+}
+
+function ExpandDialog({ isOpen, onClose, title, children }) {
+  return (
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      PaperProps={{ sx: { bgcolor: '#fff', borderRadius: 3, p: 0 } }}
+    >
+      <Box sx={{ p: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #e5e7eb' }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>{title}</Typography>
+        <IconButton onClick={onClose}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
+      <Box sx={{ p: 3, height: 500, minHeight: 400, overflow: 'auto' }}>
+        {children}
+      </Box>
+    </Dialog>
+  );
+}
+
+
+
 // FilterBar
-function FilterBar({ filters, onFilterChange }) {
+function FilterBar({ filters, onFilterChange, productFamilies, models, regions, minDate, maxDate }) {
   const handleChange = (field) => (event) => {
     onFilterChange({ ...filters, [field]: event.target.value });
   };
 
   return (
-    <Paper sx={{ p: 2, mb: 3, borderRadius: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-      <Typography variant="h2" sx={{ mb: 3, color: '#1976d2', fontWeight: 'bold', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        4kast.ai Analytics!
-      </Typography>
-
+    <Paper sx={{ p: 2, mb: 3, borderRadius: 2, boxShadow: '0 8px 12px rgba(0,0,0,0.05)' }}>
       <Grid container spacing={2} alignItems="center">
-        {/* Year Filter */}
-        <Grid item xs={12} sm={6} md={2}>
-          <FormControl fullWidth size="small" variant="outlined" sx={{ borderRadius: 2, minWidth: 160, py:1.5 }}>
-            <InputLabel>Year</InputLabel>
-            <Select
-              value={filters.year}
-              onChange={handleChange('year')}
-              label="Year"
-              startAdornment={
-                <InputAdornment position="start">
-                  <TodayIcon sx={{ color: '#2563eb' }} />
-                </InputAdornment>
-              }
-            >
-              <MenuItem value={2023}>2023</MenuItem>
-              <MenuItem value={2024}>2024</MenuItem>
-              <MenuItem value={2025}>2025</MenuItem>
+        {/* Region */}
+        <Grid item xs={12} sm={3}>
+          <FormControl fullWidth size="small">
+            <InputLabel>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PublicIcon fontSize="small" />
+                Region
+              </Box>
+            </InputLabel>
+            <Select value={filters.region} label="Region" onChange={handleChange('region')}>
+              {regions.map(r => (
+                <MenuItem key={r} value={r}>{r}</MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Grid>
-
-        {/* Region Filter */}
-        <Grid item xs={12} sm={6} md={2.5}>
-          <FormControl fullWidth size="small" variant="outlined" sx={{ borderRadius: 2, minWidth: 160 }}>
-            <InputLabel> Region</InputLabel>
-            <Select
-              value={filters.region}
-              onChange={handleChange('region')}
-              label=" Region"
-              startAdornment={
-                <InputAdornment position="start">
-                  <PublicIcon sx={{ color: '#059669' }} />
-                </InputAdornment>
-              }
-            >
-              <MenuItem value="All">All</MenuItem>
-              <MenuItem value="TX">TX</MenuItem>
-              <MenuItem value="NYC">NYC</MenuItem>
-              <MenuItem value="CA">CA</MenuItem>
+        {/* Product Family */}
+        <Grid item xs={12} sm={3}>
+          <FormControl fullWidth size="small">
+            <InputLabel>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CategoryIcon fontSize="small" />
+                Product Family
+              </Box>
+            </InputLabel>
+            <Select value={filters.productFamily} label="Product Family" onChange={handleChange('productFamily')}>
+              {productFamilies.map(pf => (
+                <MenuItem key={pf} value={pf}>{pf}</MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Grid>
-
-        {/* Product Family Filter */}
-        <Grid item xs={12} sm={6} md={2.5}>
-          <FormControl fullWidth size="small" variant="outlined" sx={{ borderRadius: 2, minWidth: 160 }}>
-            <InputLabel>Product Family</InputLabel>
-            <Select
-              value={filters.productFamily}
-              onChange={handleChange('productFamily')}
-              label="Product Family"
-              startAdornment={
-                <InputAdornment position="start">
-                  <CategoryIcon sx={{ color: '#f59e0b' }} />
-                </InputAdornment>
-              }
-            >
-              <MenuItem value="All">All</MenuItem>
-              <MenuItem value="A">A</MenuItem>
-              <MenuItem value="B">B</MenuItem>
-              <MenuItem value="C">C</MenuItem>
+        {/* Model */}
+        <Grid item xs={12} sm={3}>
+          <FormControl fullWidth size="small">
+            <InputLabel>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ModelIcon fontSize="small" />
+                Model
+              </Box>
+            </InputLabel>
+            <Select value={filters.model} label="Model" onChange={handleChange('model')}>
+              {models.map(m => (
+                <MenuItem key={m} value={m}>{m}</MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Grid>
-
         {/* Start Date */}
-        <Grid item xs={12} sm={6} md={2.5}>
+        <Grid item xs={12} sm={1.5}>
           <TextField
             fullWidth
-            size="small"
-            type="date"
             label="Start Date"
-            variant="outlined"
-            value={filters.startDate}
-            onChange={handleChange('startDate')}
+            type="date"
+            size="small"
             InputLabelProps={{ shrink: true }}
+            value={filters.startDate}
+            inputProps={{ min: minDate, max: maxDate }}
+            onChange={handleChange('startDate')}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <DateRangeIcon sx={{ color: '#2563eb' }} />
+                  <TodayIcon fontSize="small" />
                 </InputAdornment>
               ),
             }}
           />
         </Grid>
         {/* End Date */}
-        <Grid item xs={12} sm={6} md={2.5}>
+        <Grid item xs={12} sm={1.5}>
           <TextField
             fullWidth
-            size="small"
-            type="date"
             label="End Date"
-            variant="outlined"
-            value={filters.endDate}
-            onChange={handleChange('endDate')}
+            type="date"
+            size="small"
             InputLabelProps={{ shrink: true }}
+            value={filters.endDate}
+            inputProps={{ min: minDate, max: maxDate }}
+            onChange={handleChange('endDate')}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <DateRangeIcon sx={{ color: '#2563eb' }} />
+                  <TodayIcon fontSize="small" />
                 </InputAdornment>
               ),
             }}
@@ -182,62 +227,59 @@ function FilterBar({ filters, onFilterChange }) {
 }
 
 // Chart Components
-function ForecastActualTimeSeries() {
-  const [selectedTimeRange, setSelectedTimeRange] = useState('1M');
+function ForecastActualTimeSeries({
+  data = [],
+  showTitle = true,
+  startDate,
+  endDate,
+  activeRange,
+  handleRangeClick
+} = {}) {
+  // Defensive sort (handles out-of-order data)
+  const sortedData = useMemo(
+    () => [...data].sort((a, b) => new Date(a.date) - new Date(b.date)),
+    [data]
+  );
+  const allMinDate = sortedData.length ? sortedData[0].date : null;
+  const allMaxDate = sortedData.length ? sortedData[sortedData.length - 1].date : null;
 
-  const { startDate, endDate } = useMemo(() => {
-    const end = new Date();
-    end.setHours(23, 59, 59, 999);
-    let start = new Date(end);
-
-    switch (selectedTimeRange) {
-      case '5D': start.setDate(end.getDate() - 4); break;
-      case '3M': start.setMonth(end.getMonth() - 3); break;
-      case '6M': start.setMonth(end.getMonth() - 6); break;
-      case 'YTD': start = new Date(end.getFullYear(), 0, 1); break;
-      case 'All': start = new Date('2023-01-01'); break;
-      case '1M':
-      default: start.setMonth(end.getMonth() - 1); break;
+  // Button enable/disable logic based on ALL data, not filtered
+  const getIsRangeEnabled = (range, dataOverride = sortedData) => {
+    if (!dataOverride.length) return false;
+    const minD = dataOverride[0].date;
+    const maxD = dataOverride[dataOverride.length - 1].date;
+    const availableDays = (parseISO(maxD) - parseISO(minD)) / (1000 * 60 * 60 * 24) + 1;
+    switch (range) {
+      case '5D': return availableDays >= 5;
+      case '1M': return availableDays >= 28;
+      case '3M': return availableDays >= 85;
+      case '6M': return availableDays >= 170;
+      case 'YTD': return true;
+      case 'All': return true;
+      default: return true;
     }
+  };
 
-    return { startDate: start, endDate: end };
-  }, [selectedTimeRange]);
-
-const data = useMemo(() => {
-  const pointsHistory = [];
-  const pointsForecast = [];
-  let currentDate = new Date(startDate);
-  let currentValue = 10;
-
-  const totalDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24));
-  const splitDate = new Date(startDate);
-  splitDate.setDate(startDate.getDate() + Math.floor(totalDays / 2));
-
-  while (currentDate <= endDate) {
-    const point = {
-      x: new Date(currentDate),
-      y: Math.round((currentValue + Math.random() * 5 - 2.5) * 100) / 100,
-    };
-
-    if (currentDate < splitDate) {
-      pointsHistory.push(point);
-    } else if (currentDate.getTime() === splitDate.getTime()) {
-      pointsHistory.push(point);     // include this point in both
-      pointsForecast.push(point);
-    } else {
-      pointsForecast.push(point);
+  const chartData = [
+    {
+      id: "Actual",
+      data: sortedData
+        .filter(d => typeof d.actual === "number" && !isNaN(d.actual))
+        .map(d => ({
+          x: d.date,
+          y: d.actual
+        }))
+    },
+    {
+      id: "Forecast",
+      data: sortedData
+        .filter(d => typeof d.forecast === "number" && !isNaN(d.forecast))
+        .map(d => ({
+          x: d.date,
+          y: d.forecast
+        }))
     }
-
-    currentValue += Math.random() * 2 - 1;
-    currentDate.setDate(currentDate.getDate() + 1);
-  }
-
-  return [
-    { id: 'Historical', data: pointsHistory },
-    { id: 'Forecasted', data: pointsForecast },
   ];
-}, [startDate, endDate]);
-
 
   return (
     <Box sx={{ p: 2 }}>
@@ -249,8 +291,9 @@ const data = useMemo(() => {
           {['5D', '1M', '3M', '6M', 'YTD', 'All'].map((r) => (
             <Button
               key={r}
-              onClick={() => setSelectedTimeRange(r)}
-              variant={selectedTimeRange === r ? 'contained' : 'outlined'}
+              onClick={() => getIsRangeEnabled(r) && handleRangeClick(r)}
+              variant={activeRange === r ? 'contained' : 'outlined'}
+              disabled={!getIsRangeEnabled(r, sortedData)}
               sx={{
                 color: '#1e40af',
                 borderColor: '#1e40af',
@@ -266,71 +309,51 @@ const data = useMemo(() => {
         </ButtonGroup>
       </Box>
 
+      <Typography variant="body2" sx={{ color: "#555", mb: 1, textAlign: 'right' }}>
+        Filtered: {startDate} to {endDate} | Data available: {allMinDate} to {allMaxDate}
+      </Typography>
+
       <Box sx={{ height: 300 }}>
         <ResponsiveLine
-          data={data}
-          xScale={{ type: 'time', format: 'native' }}
+          data={chartData}
+          xScale={{
+            type: 'time',
+            format: '%Y-%m-%d',
+            precision: 'day',
+            useUTC: false
+          }}
           yScale={{ type: 'linear', min: 'auto', max: 'auto' }}
           axisBottom={{
-            format: selectedTimeRange === 'All' ? '%Y' : '%b %d',
-            tickValues:
-              selectedTimeRange === '5D'
-                ? 'every day'
-                : selectedTimeRange === '1M'
-                ? 'every week'
-                : selectedTimeRange === '3M'
-                ? 'every 2 weeks'
-                : selectedTimeRange === '6M'
-                ? 'every 45 days'
-                : selectedTimeRange === 'YTD'
-                ? 'every 2 months'
-                : selectedTimeRange === 'All'
-                ? 'every year'
-                : 'every month',
-            tickRotation: -30,
-            legend: '',
+            format: '%Y-%m-%d',
+            tickRotation: -45,
+            legend: 'Date',
             legendOffset: 36,
-            legendPosition: 'middle',
+            legendPosition: 'middle'
           }}
-
-          axisLeft={{
-            legend: '',
-            legendOffset: -40,
-            legendPosition: 'middle',
-          }}
-          enableGridX={false}
+          axisLeft={{ legend: 'Demand' }}
+          colors={({ id }) => id === "Actual" ? "#1e40af" : "#10b981"}
           enablePoints={true}
           pointSize={4}
-          pointColor="#1e40af"
-          pointBorderWidth={1}
-          pointBorderColor="#fff"
+          margin={{ top: 20, right: 20, bottom: 60, left: 50 }}
           useMesh={true}
           curve="monotoneX"
-          colors={({ id }) => (id === 'Historical' ? '#1e40af' : '#10b981')}
-          markers={[
+          legends={[
             {
-              axis: 'x',
-              value: data[1]?.data?.[0]?.x, // start of forecast
-              lineStyle: {
-                stroke: '#9ca3af',
-                strokeWidth: 2,
-                strokeDasharray: '6 6',
-              },
-              legend: 'Forecast Start',
-              legendPosition: 'top-right',
-              textStyle: { fill: '#6b7280', fontWeight: 600 },
-            },
+              anchor: 'top-left',
+              direction: 'row',
+              translateY: -20,
+              itemsSpacing: 10,
+              itemDirection: 'left-to-right',
+              symbolSize: 12,
+            }
           ]}
-
-          margin={{ top: 20, right: 20, bottom: 60, left: 50 }}
         />
       </Box>
     </Box>
   );
 }
 
-
-function CorrelationHeatmap() {
+function CorrelationHeatmap({ showTitle = true } ={}) {
   const data = [
     {
       id: 'Demand',
@@ -366,9 +389,10 @@ function CorrelationHeatmap() {
 
   return (
     <>
+    {showTitle && (
       <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
         Feature Correlation Heatmap
-      </Typography>
+      </Typography> )}
       <Box sx={{ height: 320 }}>
         <ResponsiveHeatMap
           data={data}
@@ -409,8 +433,7 @@ function CorrelationHeatmap() {
   );
 }
 
-
-function ErrorDistributionChart() {
+function ErrorDistributionChart({ showTitle = true } ={}) {
   const data = [
     { region: 'TX', 'Under Forecast': 16, 'Over Forecast': 12, 'Accurate': 37 },
     { region: 'Cali', 'Under Forecast': 19, 'Over Forecast': 16, 'Accurate': 24 },
@@ -419,8 +442,9 @@ function ErrorDistributionChart() {
   ];
   return (
     <>
-      <Typography variant="h6" 
-      gutterBottom>Forecast Error Distribution by Region</Typography>
+    {showTitle && (
+      <Typography variant="h6" gutterBotton
+      gutterBottom>Forecast Error Distribution by Region</Typography> )}
       <Box sx={{ height: 'calc(100% - 40px)' }}>
         <ResponsiveBar data={data} 
         keys={['Under Forecast', 'Over Forecast', 'Accurate']} 
@@ -434,13 +458,13 @@ function ErrorDistributionChart() {
             default: return '#e5e7eb';                    // fallback neutral
           }
         }}
- />
+        />
       </Box>
     </>
   );
 }
 
-function DemandVolatilityGauge() {
+function DemandVolatilityGauge({ showTitle = true } ={}) {
   const value = 0.65;
   return (
     <>
@@ -455,7 +479,7 @@ function DemandVolatilityGauge() {
   );
 }
 
-function ProductSalesBreakdown() {
+function ProductSalesBreakdown({ showTitle = true } ={}) {
   const data = [
     { product: 'Product A', sales: 963, forecast: 528 },
     { product: 'Product B', sales: 440, forecast: 1226 },
@@ -473,7 +497,7 @@ function ProductSalesBreakdown() {
   );
 }
 
-function ForecastAccuracyWaterfall() {
+function ForecastAccuracyWaterfall({ showTitle = true } ={}) {
   const rawData = [
     { label: 'Total Forecast', value: 0 },
     { label: 'Product A', value: 120 },
@@ -547,106 +571,102 @@ function ForecastAccuracyWaterfall() {
 }
 
 // KPI Components
-const KPIItem = styled(Paper)(({ theme }) => ({
-  padding: theme.spacing(2),
-  textAlign: 'center',
-  borderRadius: 8,
-  boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)',
-  transition: 'transform 0.2s, box-shadow 0.2s',
-  '&:hover': {
-    transform: 'translateY(-2px)',
-    boxShadow: '0 6px 16px 0 rgba(0,0,0,0.1)',
-  },
-}));
+const formatNumber = (num) => {
+  if (num === undefined || num === null || isNaN(num)) return "-";
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+  return num.toString();
+};
 
-const KPIValue = styled(Typography)({
-  fontSize: '1.8rem',
-  fontWeight: 800,
-  margin: '8px 0',
-  color: '#1e40af',
-});
+
+// KPICard Component
+const KPICard = ({ title, value, icon: Icon, trend, color = "blue" }) => {
+  const colorMap = {
+    blue: "#e8f0fe",
+  };
+  const borderColorMap = {
+    blue: "#fffff",
+  };
+  return (
+    <Box
+      sx={{
+        p: 3,
+        borderRadius: 3,
+        backgroundColor: colorMap[color] || colorMap.blue,
+        border: `2px solid ${borderColorMap[color] || borderColorMap.blue}`,
+        boxShadow: '0 2px 8px rgba(30,64,175,0.08)',
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+      }}
+    >
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <Box>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: "#1e40af", opacity: 0.8 }}>{title}</Typography>
+          <Typography variant="h4" sx={{ fontWeight: 900, color: "#1976d2", mt: 0.5 }}>{value}</Typography>
+          {trend !== undefined && (
+            <Typography variant="body2" sx={{ color: trend > 0 ? "#059669" : "#ef4444", fontWeight: 700, mt: 0.5 }}>
+              {trend > 0 ? "↗" : "↘"} {Math.abs(trend)}%
+            </Typography>
+          )}
+        </Box>
+        <Icon size={32} style={{ opacity: 0.7, color: "#1976d2" }} />
+      </Box>
+    </Box>
+  );
+};
 
 function KPISection({ data }) {
-  const kpis = [
-    { 
-      title: 'Total Demand', 
-      value: data.totalDemand.toLocaleString(),
-      description: 'Units',
-      trend: 'neutral',
-      color: '#1e40af',
-      icon: '📊'
-    },
-    { 
-      title: 'MAPE', 
-      value: `${data.mape}%`,
-      description: 'Mean Absolute % Error',
-      trend: data.mape < 10 ? 'good' : data.mape < 20 ? 'warning' : 'error',
-      color: '#dc2626',
-      icon: '📉'
-    },
-    { 
-      title: 'Weighted MAPE', 
-      value: `${data.weightedMape}%`,
-      description: 'Volume-weighted MAPE',
-      trend: data.weightedMape < 10 ? 'good' : data.weightedMape < 20 ? 'warning' : 'error',
-      color: '#059669',
-      icon: '⚖️'
-    },
-    { 
-      title: 'MAE', 
-      value: data.mae.toLocaleString(),
-      description: 'Mean Absolute Error',
-      trend: 'neutral',
-      color: '#7c3aed',
-      icon: '📏'
-    },
-    { 
-      title: 'Forecast Bias', 
-      value: `${data.forecastBias}%`,
-      description: 'Average forecast bias',
-      trend: Math.abs(data.forecastBias) < 5 ? 'good' : 'warning',
-      color: '#d97706',
-      icon: '🎯'
-    },
-  ];
-
-  const getTrendColor = (trend) => {
-    return '#1e40af'
-  };
-
   return (
     <Grid container spacing={2}>
-      {kpis.map((kpi, index) => (
-        <Grid item xs={12} sm={6} md={2.4} key={index}>
-          <KPIItem 
-            elevation={0}
-            sx={{
-              borderLeft: `4px solid #1e40af`,
-              backgroundColor: 'white',
-              '&:hover': {
-                transform: 'translateY(-4px)',
-                boxShadow: '0 8px 16px 0 rgba(0,0,0,0.1)',
-              },
-            }}
-          >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-              <Typography variant="subtitle2" sx={{ color: '#4b5563', fontWeight: 600 }}>
-                {kpi.title}
-              </Typography>
-              <span style={{ fontSize: '1.2rem' }}>{kpi.icon}</span>
-            </Box>
-            <KPIValue variant="h4" sx={{ color: '#1e40af', fontSize: '2rem' }}>
-              {kpi.value}
-            </KPIValue>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 1 }}>
-              <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: getTrendColor(kpi.trend), mr: 1 }} />
-              <Typography variant="caption" sx={{ color: '#6b7280', fontSize: '0.7rem' }}>
-                {kpi.description}
-              </Typography>
-            </Box>
-          </KPIItem>
-        </Grid>
-      ))}
+      <Grid item xs={12} sm={6} md={2.4}>
+        <KPICard
+          title="Total Demand"
+          value={formatNumber(Number(data.totalDemand.toFixed(2)))}
+          icon={BarChart3}
+          trend={5.2}
+          color="blue"
+        />
+      </Grid>
+      
+      <Grid item xs={12} sm={6} md={2.4}>
+        <KPICard
+          title="MAPE"
+          value={`${data.mape}%`}
+          icon={Target}
+          trend={-2.1}
+          color="blue"
+        />
+      </Grid>
+      <Grid item xs={12} sm={6} md={2.4}>
+        <KPICard
+          title="MAE"
+          value={data.mae}
+          icon={AlertCircle}
+          trend={1.5}
+          color="green"
+        />
+      </Grid>
+      <Grid item xs={12} sm={6} md={2.4}>
+        <KPICard
+          title="Forecast Bias"
+          value= {data.forecastBias !== undefined && data.forecastBias !== null ? data.forecastBias : "-"}
+          icon={TrendingUp}
+          trend={-0.8}
+          color="orange"
+        />
+      </Grid>
+      
+      <Grid item xs={12} sm={6} md={2.4}>
+        <KPICard
+          title="Weighted MAPE"
+          value={data.weightedMape !== undefined && data.weightedMape !== null ? data.weightedMape.toFixed(2) + "%" : "-"}
+          icon={Target}
+          trend={-1.3}
+          color="green"
+        />
+      </Grid>
     </Grid>
   );
 }
@@ -664,70 +684,321 @@ const theme = createTheme({
 });
 
 function Dashboard1() {
+  const [expandedChart, setExpandedChart] = useState(null);
+  const [kpiData, setKpiData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const [productFamilies, setProductFamilies] = useState([]);
+  const [regions, setRegions] = useState([]);
+  const [models, setModels] = useState([]);
+  const [minDate, setMinDate] = useState('');
+  const [maxDate, setMaxDate] = useState('');
+
+  // The FULL dataset, never overwritten!
+  const [fullTimeSeriesData, setFullTimeSeriesData] = useState([]);
+  const [timeSeriesData, setTimeSeriesData] = useState([]);
+
+  // Only these filters can trigger date resets:
   const [filters, setFilters] = useState({
-    year: 2025,
-    region: 'All',
-    productFamily: 'All',
-    startDate: '2025-05-01',
-    endDate: '2025-06-01'
+    model: '',
+    region: '',
+    productFamily: '',
+    startDate: '',
+    endDate: '',
   });
+  const [activeRange, setActiveRange] = useState('All');
 
+  // --- INIT on Mount ---
+  useEffect(() => {
+    const fetchInit = async () => {
+      setLoading(true);
+      try {
+        const token = Cookies.get("authToken");
+        const response = await fetch(DASHBOARD_ENDPOINT, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!response.ok) throw new Error("Failed to load data");
+        const res = await response.json();
 
-  const kpiData = {
-    totalDemand: 125000,
-    mape: 15.2,
-    weightedMape: 12.8,
-    mae: 8500,
-    forecastBias: 3.5
+        setProductFamilies(['All Products', ...(res.filters.productList || [])]);
+        setRegions(['All Stores', ...(res.filters.storeList || [])]);
+        setModels(res.filters.modelList || []);
+        setMinDate(res.filters.minDate || '');
+        setMaxDate(res.filters.maxDate || '');
+
+        setFullTimeSeriesData(res.timeseries || []);
+        setKpiData({
+          totalDemand: res.kpiData.total_demand,
+          mape: res.kpiData.mape,
+          mae: res.kpiData.mae,
+          forecastBias: res.kpiData.forecast_bias,
+          weightedMape: res.kpiData.weighted_mape,
+        });
+
+        // Only set start/end ONCE here, based on data, to avoid double fetches!
+        if ((res.timeseries || []).length) {
+          setFilters({
+            productFamily: 'All Products',
+            region: 'All Stores',
+            model: (res.filters.modelList && res.filters.modelList[0]) || '',
+            startDate: res.timeseries[0].date,
+            endDate: res.timeseries[res.timeseries.length - 1].date,
+          });
+        }
+        setTimeSeriesData(res.timeseries || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchInit();
+    // eslint-disable-next-line
+  }, []);
+
+  // --- Date reset only on region/productFamily change ---
+  const lastCoreFilters = useRef({ productFamily: '', region: '' });
+  useEffect(() => {
+    // Only do this if region/productFamily changed
+    const coreFiltersChanged =
+      filters.productFamily !== lastCoreFilters.current.productFamily ||
+      filters.region !== lastCoreFilters.current.region;
+
+    if (coreFiltersChanged && fullTimeSeriesData.length) {
+      setFilters((f) => ({
+        ...f,
+        startDate: fullTimeSeriesData[0].date,
+        endDate: fullTimeSeriesData[fullTimeSeriesData.length - 1].date,
+      }));
+      setActiveRange("All");
+      lastCoreFilters.current = {
+        productFamily: filters.productFamily,
+        region: filters.region,
+      };
+    }
+  }, [filters.productFamily, filters.region, fullTimeSeriesData]);
+
+  // --- Time Series display update ---
+  useEffect(() => {
+    if (!filters.startDate || !filters.endDate || !fullTimeSeriesData.length) {
+      setTimeSeriesData(fullTimeSeriesData);
+      return;
+    }
+    setTimeSeriesData(
+      fullTimeSeriesData.filter(
+        d =>
+          (isAfter(parseISO(d.date), filters.startDate) || isEqual(parseISO(d.date), filters.startDate)) &&
+          (isBefore(parseISO(d.date), filters.endDate) || isEqual(parseISO(d.date), filters.endDate))
+      )
+    );
+  }, [filters.startDate, filters.endDate, fullTimeSeriesData]);
+
+  // --- Only KPIs/API (never time series) fetched on any filter change ---
+  useEffect(() => {
+    // No fetch on initial mount (empty filters)
+    if (!filters.productFamily && !filters.region && !filters.model) return;
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const token = Cookies.get("authToken");
+        const params = new URLSearchParams();
+        if (filters.region && filters.region !== "All Stores") params.append("store", filters.region);
+        if (filters.productFamily && filters.productFamily !== "All Products") params.append("product", filters.productFamily);
+        if (filters.model) params.append("model", filters.model);
+        if (filters.startDate) params.append("start", filters.startDate);
+        if (filters.endDate) params.append("end", filters.endDate);
+
+        const response = await fetch(`${DASHBOARD_ENDPOINT}?${params.toString()}`, {
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (!response.ok) throw new Error("Failed to load dashboard data");
+        const res = await response.json();
+
+        setKpiData({
+          totalDemand: res.kpiData.total_demand,
+          mape: res.kpiData.mape,
+          mae: res.kpiData.mae,
+          forecastBias: res.kpiData.forecast_bias,
+          weightedMape: res.kpiData.weighted_mape,
+        });
+        // NEVER update timeSeriesData or filters here!
+      } catch (err) {
+        setError(err.message);
+        setKpiData(null);
+        setTimeSeriesData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+    // eslint-disable-next-line
+  }, [filters.model, filters.region, filters.productFamily, filters.startDate, filters.endDate]);
+
+  // --- Date Range quick-select handler ---
+  const handleRangeClick = (range) => {
+    if (!fullTimeSeriesData.length) return;
+    const minDate = fullTimeSeriesData[0].date;
+    const maxDate = fullTimeSeriesData[fullTimeSeriesData.length - 1].date;
+    let end = maxDate;
+    let start = minDate;
+    switch (range) {
+      case "5D":
+        start = format(
+          parseISO(maxDate) > parseISO(minDate)
+            ? subDays(parseISO(maxDate), 4)
+            : parseISO(minDate),
+          "yyyy-MM-dd"
+        );
+        if (parseISO(start) < parseISO(minDate)) start = minDate;
+        break;
+      case "1M":
+        start = format(subMonths(parseISO(maxDate), 1), "yyyy-MM-dd");
+        if (parseISO(start) < parseISO(minDate)) start = minDate;
+        break;
+      case "3M":
+        start = format(subMonths(parseISO(maxDate), 3), "yyyy-MM-dd");
+        if (parseISO(start) < parseISO(minDate)) start = minDate;
+        break;
+      case "6M":
+        start = format(subMonths(parseISO(maxDate), 6), "yyyy-MM-dd");
+        if (parseISO(start) < parseISO(minDate)) start = minDate;
+        break;
+      case "YTD":
+        start = format(startOfYear(parseISO(maxDate)), "yyyy-MM-dd");
+        if (parseISO(start) < parseISO(minDate)) start = minDate;
+        break;
+      case "All":
+      default:
+        start = minDate;
+        break;
+    }
+    setFilters((f) => ({ ...f, startDate: start, endDate: end }));
+    setActiveRange(range);
   };
+
+  // (OPTIONAL: Debug logging)
+  useEffect(() => {
+    // Uncomment if you want to watch filter changes
+    // console.log("Filters updated:", filters);
+  }, [filters]);
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Dashboard>
-        <FilterBar filters={filters} onFilterChange={setFilters} />
+        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+          <BarChart3 size={34} style={{ color: "#1e40af" }} />
+          <Typography variant="h2" sx={{ fontWeight: 900, letterSpacing: 0.5, color: "#1e40af" }}>
+            My Forecast Dashboard
+          </Typography>
+        </Box>
+        <FilterBar
+          filters={filters}
+          onFilterChange={setFilters}
+          productFamilies={productFamilies}
+          regions={regions}
+          models={models}
+          minDate={minDate}
+          maxDate={maxDate}
+        />
         <Box sx={{ mt: 3, px: 2 }}>
           {/* KPI Section */}
           <Box sx={{ mb: 3 }}>
-            <KPISection data={kpiData} />
+            {kpiData ? <KPISection data={kpiData} /> : <div>Loading KPIs...</div>}
           </Box>
           {/* Time Series Chart */}
           <Box sx={{ mt: 4, mb: 2 }}>
-            <ChartCard title="Time Series">
-              <ForecastActualTimeSeries />
+            <ChartCard title="Time Series" onExpand={() => setExpandedChart('timeseries')}>
+              <ForecastActualTimeSeries
+                data={timeSeriesData}
+                showTitle={true}
+                startDate={filters.startDate}
+                endDate={filters.endDate}
+                activeRange={activeRange}
+                handleRangeClick={handleRangeClick}
+              />
             </ChartCard>
           </Box>
           {/* Dashboard Charts in Grid */}
           <Grid container spacing={3} sx={{ mb: 3 }}>
             <Grid item xs={12} md={6}>
-              <ChartCard title="Feature Correlation Heatmap">
+              <ChartCard title="Feature Correlation Heatmap" onExpand={() => setExpandedChart('correlation')}>
                 <CorrelationHeatmap />
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>
-              <ChartCard title="Forecast Error Distribution by Region">
+              <ChartCard title="Forecast Error Distribution by Region" onExpand={() => setExpandedChart('errordist')}>
                 <ErrorDistributionChart />
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>
-              <ChartCard title="Demand Volatility Index">
+              <ChartCard title="Demand Volatility Index" onExpand={() => setExpandedChart('DVIndex')}>
                 <DemandVolatilityGauge />
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>
-              <ChartCard title="Product Sales vs Forecast">
+              <ChartCard title="Product Sales vs Forecast" onExpand={() => setExpandedChart('prodforecast')}>
                 <ProductSalesBreakdown />
               </ChartCard>
             </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard title="Forecast Accuracy Analysis" onExpand={() => setExpandedChart('FAAnalysis')}>
+                <ForecastAccuracyWaterfall />
+              </ChartCard>
+            </Grid>
           </Grid>
-          {/* Full Width Chart */}
-          <Box sx={{ backgroundColor: 'white', borderRadius: 2, boxShadow: '0 4px 12px 0 rgba(0,0,0,0.05)', p: 2, mb: 3, '&:hover': { boxShadow: '0 8px 16px 0 rgba(0,0,0,0.1)' } }}>
-            <ForecastAccuracyWaterfall />
-          </Box>
+          <ExpandDialog
+            isOpen={!!expandedChart}
+            onClose={() => setExpandedChart(null)}
+            title={
+              expandedChart === 'timeseries' ? 'Forecast vs Actual - Expanded View'
+                : expandedChart === 'correlation' ? 'Feature Correlation - Expanded View'
+                  : expandedChart === 'errordist' ? 'Forecast Error Distribution - Expanded View'
+                    : expandedChart === 'DVIndex' ? 'Demand Volatility Index - Expanded View'
+                      : expandedChart === 'prodforecast' ? 'Product Sales vs Forecast - Expanded View'
+                        : expandedChart === 'FAAnalysis' ? 'Forecast Accuracy Analysis - Expanded View'
+                          : ''
+            }
+          >
+            {expandedChart === 'timeseries' && (
+              <ChartWrapper>
+                <ForecastActualTimeSeries
+                  showTitle={false}
+                  data={timeSeriesData}
+                  startDate={filters.startDate}
+                  endDate={filters.endDate}
+                  activeRange={activeRange}
+                  handleRangeClick={handleRangeClick}
+                />
+              </ChartWrapper>
+            )}
+            {expandedChart === 'correlation' && (
+              <ChartWrapper>
+                <CorrelationHeatmap showTitle={false} />
+              </ChartWrapper>
+            )}
+            {expandedChart === 'errordist' && (
+              <ChartWrapper>
+                <ErrorDistributionChart showTitle={false} />
+              </ChartWrapper>
+            )}
+            {expandedChart === 'DVIndex' && <DemandVolatilityGauge />}
+            {expandedChart === 'prodforecast' && <ProductSalesBreakdown />}
+            {expandedChart === 'FAAnalysis' && <ForecastAccuracyWaterfall />}
+          </ExpandDialog>
         </Box>
       </Dashboard>
     </ThemeProvider>
   );
 }
+
 
 export default Dashboard1;
