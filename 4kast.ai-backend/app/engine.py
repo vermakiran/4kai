@@ -2770,11 +2770,24 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                     )
                     
                     cur.execute(
-                        'SELECT CURRENT_IDENTITY_VALUE() FROM"DBADMIN"."FINAL_FORECASTS"')
+                        'SELECT CURRENT_IDENTITY_VALUE() FROM "DBADMIN"."FINAL_FORECASTS"')
                     forecast_id = cur.fetchone()[0]
                     conn.commit()
                     response_data["forecast_id"] = forecast_id
                     print(f"Successfully inserted forecast run with ID: {forecast_id}")
+                
+                try:
+                    # Prepare the DataFrames
+                    df_hist = df[["ProductID", "StoreID", "Date", "Demand"]].dropna(subset=["Demand"])
+                    df_forecast = pd.DataFrame(forecast_records)
+                    split_and_bulk_insert(conn, df_hist, df_forecast, forecast_id)
+                
+                except Exception as split_bulk_e:
+                    print(f"Error in split_and_bulk_insert: {split_bulk_e}")
+                    traceback.print_exc()
+                    response_data["db_error"] = f"Row-level insert failed: {split_bulk_e}"
+
+
             except Exception as db_e:
                 print(f"Database insertion into FINAL_FORECASTS failed: {str(db_e)}")
                 traceback.print_exc()

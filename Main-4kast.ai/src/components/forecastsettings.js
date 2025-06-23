@@ -319,6 +319,108 @@ const detectDataFrequency = (dates) => {
   return 'daily'; // fallback
 };
 
+function ItemWiseTable({ csvData }) {
+  const items = useMemo(() => [...new Set(csvData.map(row => row.Item))], [csvData]);
+  const [selectedItem, setSelectedItem] = useState(items[0] || "");
+
+  useEffect(() => {
+    if (items.length > 0 && !items.includes(selectedItem)) {
+      setSelectedItem(items[0]);
+    }
+  }, [items, selectedItem]);
+
+  const filteredData = useMemo(
+    () => csvData.filter(row => row.Item === selectedItem),
+    [csvData, selectedItem]
+  );
+
+  return (
+    <div className="item-forecast">
+      <div className="item-selector">
+        <label>Select Item: </label>
+        <select value={selectedItem} onChange={e => setSelectedItem(e.target.value)}>
+          {items.map(item => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </div>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Model</th>
+              <th>Forecast</th>
+              <th>Run Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.map((row, idx) => (
+              <tr key={idx}>
+                <td>{row.Date}</td>
+                <td>{row.Model}</td>
+                <td>{typeof row.Forecast === 'number' ? row.Forecast.toFixed(2) : row.Forecast}</td>
+                <td>{row.RunType}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function StoreItemComboTable({ csvData }) {
+  const combos = useMemo(
+    () => [...new Set(csvData.map(row => `${row.Store} - ${row.Item}`))],
+    [csvData]
+  );
+  const [selectedCombo, setSelectedCombo] = useState(combos[0] || "");
+
+  useEffect(() => {
+    if (combos.length > 0 && !combos.includes(selectedCombo)) {
+      setSelectedCombo(combos[0]);
+    }
+  }, [combos, selectedCombo]);
+
+  const filteredData = useMemo(
+    () => csvData.filter(row => `${row.Store} - ${row.Item}` === selectedCombo),
+    [csvData, selectedCombo]
+  );
+
+  return (
+    <div className="combo-forecast">
+      <div className="combination-selector">
+        <label>Select Store-Item Combination: </label>
+        <select value={selectedCombo} onChange={e => setSelectedCombo(e.target.value)}>
+          {combos.map(combo => <option key={combo} value={combo}>{combo}</option>)}
+        </select>
+      </div>
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Model</th>
+              <th>Forecast</th>
+              <th>Run Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredData.map((row, idx) => (
+              <tr key={idx}>
+                <td>{row.Date}</td>
+                <td>{row.Model}</td>
+                <td>{typeof row.Forecast === 'number' ? row.Forecast.toFixed(2) : row.Forecast}</td>
+                <td>{row.RunType}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+
 const ForecastSettings = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
@@ -756,66 +858,6 @@ const ForecastSettings = () => {
       if (!response.ok || result.status === "error") {
         throw new Error(result.message || result.detail || `API responded with status ${response.status}`);
       }
-
-      // Process forecast type and structure
-      if (result.forecast_type === "Item-wise") {
-        showAlert("Processing item-wise forecast data...", "info");
-        
-        const topLevelKeys = Object.keys(result.future_forecasts);
-        const containsModelName = topLevelKeys.some(key => 
-          selectedModel === key || 
-          ['SES', 'ARIMA', 'SARIMA', 'Prophet', 'HWES', 'Random Forest', 'LSTM', 'XGBoost', 'Croston', 'GRU'].includes(key)
-        );
-        
-        if (containsModelName) {
-          showAlert("Restructuring forecast data for item-wise display...", "info");
-          
-          let uniqueProductIds = [];
-          
-          if (result.original_data) {
-            uniqueProductIds = [...new Set(result.original_data.map(row => row.ProductID))];
-          }
-          
-          if (uniqueProductIds.length === 0) {
-            uniqueProductIds = ["aggregated"];
-          }
-          
-          const restructuredForecasts = {};
-          uniqueProductIds.forEach(productId => {
-            restructuredForecasts[productId] = {};
-            for (const modelName of topLevelKeys) {
-              restructuredForecasts[productId][modelName] = result.future_forecasts[modelName];
-            }
-          });
-          
-          result.future_forecasts = restructuredForecasts;
-        }
-      } else if (result.forecast_type === "Store-Item Combination") {
-        showAlert("Processing store-item combination forecast data...", "info");
-        
-        const topLevelKeys = Object.keys(result.future_forecasts);
-        const hasProperComboFormat = topLevelKeys.some(key => key.includes(' - '));
-        const containsModelName = topLevelKeys.some(key => 
-          selectedModel === key || 
-          ['SES', 'ARIMA', 'SARIMA', 'Prophet', 'HWES', 'Random Forest', 'LSTM', 'XGBoost', 'Croston', 'GRU'].includes(key)
-        );
-        
-        if (!hasProperComboFormat && containsModelName) {
-          showAlert("Restructuring forecast data for store-item combination display...", "info");
-          
-          const restructuredForecasts = {
-            "aggregated_data": {}
-          };
-          
-          for (const modelName of topLevelKeys) {
-            restructuredForecasts["aggregated_data"][modelName] = result.future_forecasts[modelName];
-          }
-          
-          result.future_forecasts = restructuredForecasts;
-        }
-      }
-
-      result.columnMappings = columnMappings;
       
       setIsLoading(false);
       
@@ -1684,352 +1726,41 @@ const ForecastSettings = () => {
                 )}
               </div>
             ))}
-            
-            <h4>Future Forecasts</h4>
-            <div className="future-forecasts">
-              {forecastResults.forecast_type === "Overall" ? (
-                // Overall forecast type display
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    {Object.keys(forecastResults.future_forecasts || {}).map(modelName => (
-                      <th key={modelName}>{modelName}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                    {Array.from({ length: parseInt(forecastHorizon) || 30 }).map((_, index) => {
-                      // Detect frequency and generate future dates from current date
-                      const dataFrequency = detectDataFrequency(forecastResults.dates);
-                      const futureDates = generateFutureDatesFromCurrent(parseInt(forecastHorizon) || 30, dataFrequency);
-                      const futureDate = futureDates[index];
-                      
-                      return (
-                    <tr key={index}>
-                          <td>{futureDate ? futureDate.toISOString().split('T')[0] : `Future_${index + 1}`}</td>
-                          {Object.entries(forecastResults.future_forecasts || {}).map(([modelName, forecasts]) => (
-                            <td key={modelName}>
-                              {Array.isArray(forecasts) && index < forecasts.length ? 
-                                typeof forecasts[index] === 'number' ? 
-                                  forecasts[index].toFixed(2) : forecasts[index]
-                                : 'N/A'}
-                            </td>
-                      ))}
+            {forecastResults.forecast_type === "Overall" && (
+              <div className="table-container">
+                <h4>Forecast (Overall)</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Model</th>
+                      <th>Forecast</th>
+                      <th>Run Type</th>
                     </tr>
-                      );
-                    })}
+                  </thead>
+                  <tbody>
+                    {forecastResults.csv_data?.map((row, index) => (
+                      <tr key={index}>
+                        <td>{row.Date}</td>
+                        <td>{row.Model}</td>
+                        <td>{typeof row.Forecast === 'number' ? row.Forecast.toFixed(2) : row.Forecast}</td>
+                        <td>{row.RunType}</td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
-              ) : forecastResults.forecast_type === "Item-wise" ? (
-                // Item-wise forecast type display
-                <div className="item-wise-forecast">
-                  <div className="item-selector">
-                    <label>Select Item:</label>
-                    <select onChange={(e) => {
-                      const productId = e.target.value;
-                      document.getElementById(`item-forecast-${productId}`)?.scrollIntoView({ behavior: 'smooth' });
-                    }}>
-                      {(() => {
-                        const productIds = Object.keys(forecastResults.future_forecasts || {});
-                        return productIds.map(productId => {
-                          let displayName = productId;
-                          if (productId === "default_product") {
-                            displayName = "All Products";
-                          } else if (productId === "all_items") {
-                            displayName = "All Items";
-                          } else if (productId === "aggregated") {
-                            displayName = "Aggregated Data";
-                          }
-                          return (
-                            <option key={productId} value={productId}>{displayName}</option>
-                          );
-                        });
-                      })()}
-                    </select>
-                  </div>
-                  
-                  {(() => {
-                    const entries = Object.entries(forecastResults.future_forecasts || {});
-                    return entries.map(([productId, modelForecasts]) => {
-                      const isNestedStructure = typeof modelForecasts === 'object' && !Array.isArray(modelForecasts);
-                      const modelNames = Object.keys(modelForecasts);
+              </div>
+            )}
 
-                      return (
-                        <div key={productId} id={`item-forecast-${productId}`} className="item-forecast">
-                          <h5>Product: {
-                            productId === "default_product" ? "All Products" : 
-                            productId === "all_items" ? "All Items" : 
-                            productId === "aggregated" ? "Aggregated Data" : 
-                            productId
-                          }</h5>
-                          {/* Add the message here */}
-                          {forecastMethod === "Best Fit" && modelNames.length === 1 && (
-                            <div style={{ color: "#008000", fontWeight: "500", marginBottom: "6px" }}>
-                              Showing best-fit model: <b>{modelNames[0]}</b>
-                            </div>
-                          )}
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                {modelNames.map(modelName => (
-                                  <th key={modelName}>{modelName}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Array.from({ length: parseInt(forecastHorizon) || 30 }).map((_, index) => {
-                                const dataFrequency = detectDataFrequency(forecastResults.dates || []);
-                                const futureDates = generateFutureDatesFromCurrent(parseInt(forecastHorizon) || 30, dataFrequency);
-                                const futureDate = futureDates[index];
-                                
-                                return (
-                                  <tr key={index}>
-                                    <td>{futureDate ? futureDate.toISOString().split('T')[0] : `Future_${index + 1}`}</td>
-                                    {modelNames.map(modelName => {
-                                      const forecasts = isNestedStructure
-                                        ? modelForecasts[modelName]
-                                        : modelForecasts;
-                                      
-                                      let forecastValue = 'N/A';
-                                      if (Array.isArray(forecasts) && index < forecasts.length) {
-                                        const value = forecasts[index];
-                                        if (typeof value === 'object' && value !== null) {
-                                          // If the value is an object, extract the relevant property
-                                          forecastValue = value.value || value.forecast || 'N/A';
-                                        } else if (typeof value === 'number') {
-                                          forecastValue = value.toFixed(2);
-                                        } else {
-                                          forecastValue = value || 'N/A';
-                                        }
-                                      }
-                                      
-                                      return <td key={modelName}>{forecastValue}</td>;
-                                    })}
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              ) : forecastResults.forecast_type === "Store-Item Combination" ? (
-                // Store-Item Combination forecast type display
-                <div className="store-item-forecast">
-                  <div className="combination-selector">
-                    <label>Select Store-Item Combination:</label>
-                    <select onChange={(e) => {
-                      const comboId = e.target.value;
-                      document.getElementById(`combo-forecast-${comboId}`)?.scrollIntoView({ behavior: 'smooth' });
-                    }}>
-                      {(() => {
-                        // Get all combo IDs (top-level keys)
-                        const comboIds = Object.keys(forecastResults.future_forecasts || {});
-                        
-                        // Map them to options
-                        return comboIds.map(comboId => {
-                          // Display the store-item combination more nicely
-                          let displayName = comboId;
-                          
-                          if (comboId === "default_store - default_product") {
-                            displayName = "All Store-Item Combinations";
-                          } else if (comboId === "all_combinations") {
-                            displayName = "All Combinations";
-                          } else if (comboId === "aggregated_data") {
-                            displayName = "Aggregated Data";
-                          } else {
-                            const parts = comboId.split(' - ');
-                            if (parts.length === 2) {
-                              displayName = `Store: ${parts[0]}, Item: ${parts[1]}`;
-                            }
-                          }                        
-                          
-                          return (
-                            <option key={comboId} value={comboId}>{displayName}</option>
-                          );
-                        });
-                      })()}
-                    </select>
-                  </div>
-                  
-                  {(() => {
-                    // Get all entries from future_forecasts
-                    const entries = Object.entries(forecastResults.future_forecasts || {});
-                    
-                    // Map each entry to a forecast display
-                    return entries.map(([comboId, modelForecasts]) => {
-                      console.log(`Rendering combination ${comboId} with forecasts:`, modelForecasts);
-                      
-                      // Check for special combo names
-                      let displayTitle = comboId;
-                      
-                      if (comboId === "default_store - default_product") {
-                        displayTitle = "All Store-Item Combinations";
-                      } else if (comboId === "all_combinations") {
-                        displayTitle = "All Combinations";
-                      } else if (comboId === "aggregated_data") {
-                        displayTitle = "Aggregated Data";
-                      } else {
-                        const parts = comboId.split(' - ');
-                        if (parts.length === 2) {
-                          const storeId = parts[0];
-                          const itemId = parts[1];
-                          displayTitle = `Store: ${storeId}, Item: ${itemId}`;
-                        }
-                      }
-                      
-                      // Check data structure - is it nested or flat?
-                      const isNestedStructure = typeof modelForecasts === 'object' && !Array.isArray(modelForecasts);
-                      
-                      // Get model names based on structure
-                      const modelNames = Object.keys(modelForecasts);
-                      
-                      console.log(`Combo ${comboId} modelNames:`, modelNames);
-                      
-                      return (
-                        <div key={comboId} id={`combo-forecast-${comboId}`} className="combo-forecast">
-                          <h5>{displayTitle}</h5>
-                          {forecastMethod === "Best Fit" && (
-                            <div style={{ color: "#008000", fontWeight: "500", marginBottom: "6px" }}>
-                              Showing best-fit model: <b>{
-                                // Find the best model based on test RMSE
-                                (() => {
-                                  const results = forecastResults.results || {};
-                                  let bestModel = modelNames[0];
-                                  let bestRMSE = Infinity;
-                                  
-                                  Object.entries(results).forEach(([model, metrics]) => {
-                                    // Remove store-item suffix from model name for comparison
-                                    const baseModelName = model.split('_')[0];
-                                    if (metrics.test && metrics.test[0] < bestRMSE) {
-                                      bestRMSE = metrics.test[0];
-                                      bestModel = baseModelName;
-                                    }
-                                  });
-                                  
-                                  return bestModel;
-                                })()
-                              }</b>
-                            </div>
-                          )}
-                          <table>
-                            <thead>
-                              <tr>
-                                <th>Date</th>
-                                {forecastMethod === "Best Fit" ? 
-                                  [(() => {
-                                    const results = forecastResults.results || {};
-                                    let bestModel = modelNames[0];
-                                    let bestRMSE = Infinity;
-                                    
-                                    Object.entries(results).forEach(([model, metrics]) => {
-                                      // Remove store-item suffix from model name for comparison
-                                      const baseModelName = model.split('_')[0];
-                                      if (metrics.test && metrics.test[0] < bestRMSE) {
-                                        bestRMSE = metrics.test[0];
-                                        bestModel = baseModelName;
-                                      }
-                                    });
-                                    
-                                    return bestModel;
-                                  })()].map(modelName => (
-                                    <th key={modelName}>{modelName}</th>
-                                  ))
-                                  :
-                                  modelNames.map(modelName => {
-                                    // Remove store-item suffix for display
-                                    const baseModelName = modelName.split('_')[0];
-                                    return <th key={modelName}>{baseModelName}</th>;
-                                  })
-                                }
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Array.from({ length: parseInt(forecastHorizon) || 30 }).map((_, index) => {
-                                const dataFrequency = detectDataFrequency(forecastResults.dates);
-                                const futureDates = generateFutureDatesFromCurrent(parseInt(forecastHorizon) || 30, dataFrequency);
-                                const futureDate = futureDates[index];
-                                
-                                return (
-                                  <tr key={index}>
-                                    <td>{futureDate ? futureDate.toISOString().split('T')[0] : `Future_${index + 1}`}</td>
-                                    {forecastMethod === "Best Fit" ? 
-                                      [(() => {
-                                        const results = forecastResults.results || {};
-                                        let bestModel = modelNames[0];
-                                        let bestRMSE = Infinity;
-                                        let bestModelFullName = modelNames[0];
-                                        
-                                        Object.entries(results).forEach(([model, metrics]) => {
-                                          // Remove store-item suffix for comparison
-                                          const baseModelName = model.split('_')[0];
-                                          if (metrics.test && metrics.test[0] < bestRMSE) {
-                                            bestRMSE = metrics.test[0];
-                                            bestModel = baseModelName;
-                                            bestModelFullName = model;
-                                          }
-                                        });
-                                        
-                                        // Find the matching model name in current combo's forecasts
-                                        const matchingModelName = modelNames.find(name => name.startsWith(bestModel));
-                                        return matchingModelName || bestModelFullName;
-                                      })()].map(modelName => {
-                                        const forecasts = isNestedStructure
-                                          ? modelForecasts[modelName]
-                                          : modelForecasts;
-                                        
-                                        return (
-                                          <td key={modelName}>
-                                            {Array.isArray(forecasts) && index < forecasts.length
-                                              ? typeof forecasts[index] === 'number'
-                                                ? forecasts[index].toFixed(2)
-                                                : forecasts[index]
-                                              : 'N/A'}
-                                          </td>
-                                        );
-                                      })
-                                      :
-                                      modelNames.map(modelName => {
-                                        const forecasts = isNestedStructure
-                                          ? modelForecasts[modelName]
-                                          : modelForecasts;
-                                        
-                                        return (
-                                          <td key={modelName}>
-                                            {Array.isArray(forecasts) && index < forecasts.length
-                                              ? typeof forecasts[index] === 'number'
-                                                ? forecasts[index].toFixed(2)
-                                                : forecasts[index]
-                                              : 'N/A'}
-                                          </td>
-                                        );
-                                      })
-                                    }
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              ) : (
-                // Fallback display if forecast type is unknown
-                <div className="unknown-forecast-type">
-                  <p>Unknown forecast type: {forecastResults.forecast_type || "Not specified"}</p>
-                  <p>Raw data:</p>
-                  <pre>{JSON.stringify(forecastResults.future_forecasts, null, 2)}</pre>
-                </div>
-              )}
+            {forecastResults.forecast_type === "Item-wise" && (
+              <ItemWiseTable csvData={forecastResults.csv_data} />
+            )}
+
+            {forecastResults.forecast_type === "Store-Item Combination" && (
+              <StoreItemComboTable csvData={forecastResults.csv_data} />
+            )}
             </div>
           </div>
-        </div>
       )}
     </div>
   );
