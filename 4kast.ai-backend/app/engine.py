@@ -50,8 +50,8 @@ import seaborn as sns
 import plotly.express as px
 from .config import OrganizationCalendarConfig
 import pprint
-
-
+from typing import Optional
+import traceback
 
 
 
@@ -167,7 +167,6 @@ async def upload_cleaned_data(
             )
 
         except Exception as e:
-            import traceback
             traceback_str = traceback.format_exc()
             return JSONResponse(
                 status_code=500,
@@ -405,7 +404,6 @@ async def run_forecast(request: Request, current_user: str = Depends(get_current
                 )
 
         except Exception as e:
-            import traceback
             traceback_str = traceback.format_exc()
             return JSONResponse(
                 status_code=200,
@@ -422,7 +420,6 @@ async def run_forecast(request: Request, current_user: str = Depends(get_current
             content={"status": "error", "message": f"Invalid JSON in request: {str(e)}"}
         )
     except Exception as e:
-        import traceback
         traceback_str = traceback.format_exc()
         return JSONResponse(
             status_code=500,
@@ -969,7 +966,6 @@ def lstm_model(train, val, test, n_steps=3, horizon=30):
         logging.error(f"LSTM Error: {str(e)}")
         return f"LSTM Failed: {str(e)}", None
 
-
 def croston_model(train, val, test, alpha=0.4, method='classic', horizon=30): 
     try:
         full_df = pd.concat([train, val, test])
@@ -1305,8 +1301,6 @@ def gaussian_process_model(train, val, test, horizon=30):
     except Exception as e:
         logging.error(f"Gaussian Process Error: {str(e)}", exc_info=True)
         return f"Gaussian Process Failed: {str(e)}", None
-
-
 
 # Function to forecast using various models
 def forecast_models(df, selected_models, additional_cols=None, item_col=None, forecast_type='Overall', horizon=30):
@@ -1959,7 +1953,6 @@ def safe_forecast_models(df, selected_models, additional_cols=None, item_col=Non
     
     except Exception as e:
         print(f"Error in safe_forecast_models: {str(e)}")
-        import traceback
         traceback.print_exc()
         raise e
     
@@ -2083,7 +2076,7 @@ def adapt_forecast_structure(future_forecasts, forecast_type, selected_models=No
     return adapted_forecasts
 
 # Function to transform forecast results into a CSV-ready format
-def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type, future_dates=None, organization_id='default'):
+def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,run_type_label,future_dates=None, organization_id='default'):
     """Transform forecast results into CSV-ready format with organization-specific calendar support"""
     csv_rows = []
     
@@ -2141,7 +2134,8 @@ def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,
                                 "Store": "",
                                 "Item": inner_key,
                                 "Model": model_name,
-                                "Forecast": forecast_value
+                                "Forecast": forecast_value,
+                                "RunType": run_type_label 
                             }
                             csv_rows.append(row)
             else:
@@ -2152,7 +2146,8 @@ def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,
                             "Store": "",
                             "Item": "Total",
                             "Model": model_name,
-                            "Forecast": forecast_value
+                            "Forecast": forecast_value,
+                            "RunType": run_type_label 
                         }
                         csv_rows.append(row)
     
@@ -2169,7 +2164,8 @@ def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,
                                 "Store": "",
                                 "Item": item_name,
                                 "Model": model_name,
-                                "Forecast": forecast_value
+                                "Forecast": forecast_value,
+                                "RunType": run_type_label 
                             }
                             csv_rows.append(row)
             else:
@@ -2181,7 +2177,8 @@ def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,
                             "Store": "",
                             "Item": item_name,
                             "Model": "Default",
-                            "Forecast": forecast_value
+                            "Forecast": forecast_value,
+                            "RunType": run_type_label
                         }
                         csv_rows.append(row)
     
@@ -2207,7 +2204,8 @@ def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,
                                 "Store": store_id,
                                 "Item": item_id,
                                 "Model": model_name,
-                                "Forecast": forecast_value
+                                "Forecast": forecast_value,
+                                "RunType": run_type_label
                             }
                             csv_rows.append(row)
             else:
@@ -2218,7 +2216,8 @@ def transform_forecasts_for_csv(results, future_forecasts, dates, forecast_type,
                             "Store": store_id,
                             "Item": item_id,
                             "Model": "Default",
-                            "Forecast": forecast_value
+                            "Forecast": forecast_value,
+                            "RunType": run_type_label
                         }
                         csv_rows.append(row)
     
@@ -2237,12 +2236,18 @@ def attach_val_metrics_to_csv_rows(csv_data, results, forecast_type):
             key = row['Model']
 
         val_metrics = results.get(key, {}).get('val', None)
-        if val_metrics and len(val_metrics) == 4:
-            for i, val in enumerate(val_metrics, 1):
-                row[f"val_{i}"] = val
+        if val_metrics and isinstance(val_metrics, (list, tuple)) and len(val_metrics) == 4:
+            row["RMSE"] = val_metrics[0]
+            row["MAPE"] = val_metrics[1]
+            row["MAE"]  = val_metrics[2]
+            row["BIAS"] = val_metrics[3]
         else:
-            for i in range(1, 5):
-                row[f"val_{i}"] = None
+            # If metrics are missing, fill with None
+            row["RMSE"] = None
+            row["MAPE"] = None
+            row["MAE"]  = None
+            row["BIAS"] = None
+
     return csv_data
 
 def upsert_full_forecast_run(conn, runid, historical_records, forecast_records, wipe_old=True):
@@ -2404,35 +2409,16 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
     try:
         with conn.cursor() as cur:
             cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
-            models = [row[0] for row in cur.fetchall()]
-        # return {"models":models}
-        available_model_names = models
-    
-        # Set default models if none provided
-        if selected_models is None or not selected_models:
-            selected_models = available_model_names
+            available_model_names = [row[0] for row in cur.fetchall()]
         
-        # Validate selected models against available models
-        available_model_names = [model for model in available_model_names]
-        invalid_models = [model for model in selected_models if model not in available_model_names]
-        if invalid_models:
-            raise ValueError(f"Invalid model(s) selected: {invalid_models}. Available models are: {available_model_names}")
-        
-        # Filter out any invalid models
-        selected_models = [model for model in selected_models if model in available_model_names]
-        if not selected_models:
-            raise ValueError("No valid models selected for forecasting")
-        
-        print(f"Using validated models: {selected_models}")
-        
-        # BEST-FIT START
         is_best_fit_mode = not selected_models or len(selected_models) == 0
         if is_best_fit_mode:
-            with conn.cursor() as cur:
-                cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
-                selected_models = [row[0] for row in cur.fetchall()]
-            print(f"Best Fit mode: running all models: {selected_models}")
+            selected_models = available_model_names
+            print(f"Best Fit mode: running all available models: {selected_models}")
         else:
+            invalid_models = [model for model in selected_models if model not in available_model_names]
+            if invalid_models:
+                raise ValueError(f"Invalid model(s) selected: {invalid_models}. Available models are: {available_model_names}")
             print(f"Running selected models: {selected_models}")
         
         # Check if metadata file exists for this file
@@ -2652,9 +2638,6 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         print(f"Running forecast with type: {forecast_type}, horizon: {forecast_horizon}, time bucket: {time_bucket}, forecast lock: {forecast_lock}")
         print(f"DataFrame shape: {df.shape}, date range: {df['Date'].min()} to {df['Date'].max()}")
         
-        # Import the forecast_models function from app.py
-        # from app import forecast_models
-        
         # Determine the appropriate item_col based on forecast_type
         item_col = None
         # First check if we have a valid item_col from metadata
@@ -2742,61 +2725,65 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         print("Returning forecast response with keys:", list(response_data.keys()))
         print("Forecast type:", response_data.get('forecast_type'))
         
-        # For item-wise or store-item forecasts, add item identifiers to the CSV-ready format
-        if forecast_type in ["Item-wise", "Store-Item Combination"]:
-            # Get future dates (needed for CSV)
-            if isinstance(dates_list, list) and dates_list:
+        run_type_label = "Best Fit" if is_best_fit_mode else "Manual Selection"
+        
+        #Forecasts for UI and db
+        forecast_records =[]
+        try:
+            if dates_list:
                 last_date = pd.to_datetime(dates_list[-1])
-                future_dates = [
-                    (last_date + pd.DateOffset(days=i+1)).strftime('%Y-%m-%d')
-                    for i in range(forecast_horizon)
-                ]
+                freq = api_infer_frequency(df, date_col='Date')
+                future_dates_pd = pd.date_range(start = last_date, periods=forecast_horizon +1, freq=freq)[1:]
+                future_dates = [d.strftime('%Y-%m-%d') for d in future_dates_pd]
+                
             else:
                 future_dates = [f"Future_{i+1}" for i in range(forecast_horizon)]
                 
-            # Add CSV-ready data to the response with error handling
-            try:
-                # Print some debug info
-                print(f"forecast_type: {forecast_type}")
-                print(f"results data type: {type(results)}")
-                print(f"future_forecasts data type: {type(future_forecasts)}")
-                print(f"selected_models: {selected_models}")
-                
-                # Print the structure of future_forecasts in more detail
-                print("future_forecasts structure:")
-                if isinstance(future_forecasts, dict):
-                    for key, value in future_forecasts.items():
-                        print(f"  key: {key}, value type: {type(value)}")
-                        if isinstance(value, dict):
-                            for sub_key, sub_value in value.items():
-                                print(f"    sub_key: {sub_key}, sub_value type: {type(sub_value)}")
-                
-                # Transform forecasts to CSV format
-                csv_data = transform_forecasts_for_csv(
-                    results,
-                    future_forecasts,
-                    dates_list,
-                    forecast_type,
-                    future_dates=future_dates
-                )
-                
-                # Attach validation metrics to CSV rows
-                csv_data = attach_val_metrics_to_csv_rows(csv_data, results, forecast_type)
-                
-                # Add CSV data to response
-                response_data["csv_data"] = csv_data
-                
-            except Exception as e:
-                print(f"Error preparing CSV data: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                response_data["csv_data"] = []
+            
+            # passing the run_type label, Transforms the forcast result into clean list of dictionary
+            forecast_records = transform_forecasts_for_csv(
+                results,
+                response_data["future_forecasts"],
+                dates_list,
+                forecast_type,
+                run_type_label,
+                future_dates=future_dates
+            )
+            
+            forecast_records = attach_val_metrics_to_csv_rows(forecast_records, results, forecast_type)
+            
+            response_data["csv_data"] = forecast_records
+            print(f"Successfully prepared {len(forecast_records)} forecast records")
+            
+        except Exception as e:
+            print(f"Error preparing forecast records for DB/UI: {str(e)}")
+            traceback.print_exc()
+            response_data["csv_data"] = []
+            
         
+        if forecast_records:
+            try:
+                with conn.cursor() as cur:
+                    forecast_json_blob = json.dumps(make_json_serializable(forecast_records))
+                    cur.execute(
+                        'INSERT INTO "DBADMIN"."FINAL_FORECASTS" ("FORECASTDATA") VALUES (?)', (forecast_json_blob,)
+                    )
+                    
+                    cur.execute(
+                        'SELECT CURRENT_IDENTITY_VALUE() FROM"DBADMIN"."FINAL_FORECASTS"')
+                    forecast_id = cur.fetchone()[0]
+                    conn.commit()
+                    response_data["forecast_id"] = forecast_id
+                    print(f"Successfully inserted forecast run with ID: {forecast_id}")
+            except Exception as db_e:
+                print(f"Database insertion into FINAL_FORECASTS failed: {str(db_e)}")
+                traceback.print_exc()
+                response_data["db_error"] = f"Failed to save to database: {str(db_e)}"
+                    
         return response_data
         
     except Exception as e:
         print(f"Error in run_forecast_for_file: {str(e)}")
-        import traceback
         traceback.print_exc()
         raise e
 
@@ -2885,7 +2872,6 @@ async def login(request: LoginRequest, conn=Depends(get_hana_connection)):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Login failed: {str(e)}")
-    
     
 @router.post("/uploadfile")
 async def upload_file(file: UploadFile = File(...),current_user: str = Depends(get_current_user)):
@@ -3125,7 +3111,35 @@ async def get_dashboard_data(
             }
             for r in cur.fetchall()
         ]
-
+        
+        product_sales_breakdown =[]
+        if (store and store != "All Stores") and (product and product!= "All Products"):
+            where_clauses = ["RUNID = ?", "STOREID = ?", "PRODUCTID = ?"]
+            params = [latest_forecastid, store, product]
+            if start:
+                where_clauses.append("FORECASTDATE >= ?")
+                params.append(str(start))
+            if end:
+                where_clauses.append("FORECASTDATE <= ?")
+                params.append(str(end))
+            where_str = " AND ".join(where_clauses)
+            cur.execute(f"""
+                SELECT PRODUCTID,
+                       COALESCE(SUM(HISTORICALDEMAND), 0) AS sales,
+                       COALESCE(SUM(PREDICTEDDEMAND), 0) AS forecast
+                FROM DBADMIN.FORECASTDATA
+                WHERE {where_str}
+                GROUP BY PRODUCTID
+                ORDER BY PRODUCTID
+            """, params)
+            product_sales_breakdown = [
+                {
+                    "product":row[0],
+                    "sales":float(row[1]),
+                    "forecast":float(row[2])
+                }
+                for row in cur.fetchall()
+            ]
         return {
             "filters": {
                 "productList": product_list,
@@ -3135,7 +3149,8 @@ async def get_dashboard_data(
                 "maxDate": max_date
             },
             "kpiData": kpiData,
-            "timeseries": timeseries
+            "timeseries": timeseries,
+            "productSalesBreakdown": product_sales_breakdown
         }
 
 
@@ -3684,11 +3699,6 @@ def generate_future_dates_from_current(horizon, frequency='D', organization_id='
             freq='D'
         )
 
-# Add these imports at the top
-from pydantic import BaseModel
-from typing import Optional
-
-# Add these Pydantic models for API requests
 class OrganizationCalendarRequest(BaseModel):
     organization_id: str
     week_start_day: int  # 0=Monday, 6=Sunday

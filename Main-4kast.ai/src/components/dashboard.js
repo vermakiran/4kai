@@ -316,6 +316,33 @@ function ForecastActualTimeSeries({
       <Box sx={{ height: 300 }}>
         <ResponsiveLine
           data={chartData}
+          tooltip={({ point }) => {
+            const isActual = point.serieId === "Actual";
+            const label = isActual ? "Historical" : "Forecast";
+            const color = isActual ? "#1e40af" : "#10b981";
+            const dateStr = format(new Date(point.data.x), "yyyy-MM-dd");
+          return (
+            <Box sx={{
+              bgcolor: "#fff",
+              border: `2px solid ${color}`,
+              borderRadius: 2,
+              px: 4,
+              py: 2,
+              minWidth: 220,
+              boxShadow: 2
+            }}>
+              <Typography sx={{ fontWeight: 700, color, mb: 0.5 }}>
+                {label}
+              </Typography>
+              <Typography sx={{ color: "#222" }}>
+                Date: <strong>{dateStr}</strong>
+              </Typography>
+              <Typography sx={{ color: "#222" }}>
+                Demand: <strong>{point.data.yFormatted}</strong>
+              </Typography>
+            </Box>
+          );
+        }}
           xScale={{
             type: 'time',
             format: '%Y-%m-%d',
@@ -479,19 +506,69 @@ function DemandVolatilityGauge({ showTitle = true } ={}) {
   );
 }
 
-function ProductSalesBreakdown({ showTitle = true } ={}) {
-  const data = [
-    { product: 'Product A', sales: 963, forecast: 528 },
-    { product: 'Product B', sales: 440, forecast: 1226 },
-    { product: 'Product C', sales: 727, forecast: 520 },
-    { product: 'Product D', sales: 981, forecast: 1021 },
-    { product: 'Product E', sales: 1349, forecast: 755 }
-  ];
+function ProductSalesBreakdown({ showTitle = true, data =[], filters } ={}) {
+  if (
+    !filters ||
+    filters.region === "All Stores" ||
+    filters.productFamily === "All Products"
+  ) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center', color: "#888" }}>
+        <Typography variant="h6">
+          Please select a specific Store and Product to see the breakdown.
+        </Typography>
+      </Box>
+    );
+  }
   return (
     <>
-      <Typography variant="h6" gutterBottom>Product Sales vs Forecast</Typography>
-      <Box sx={{ height: 'calc(100% - 40px)' }}>
-        <ResponsiveBar data={data} keys={['sales', 'forecast']} indexBy="product" colors={["#2563eb", "#818cf8"]} />
+      {showTitle && (
+        <Typography variant="h6" gutterBottom>Product Sales vs Forecast</Typography>
+      )}
+      <Box sx={{ height: 320 }}>
+        <ResponsiveBar
+          data={data}
+          keys={['sales', 'forecast']}
+          indexBy="product"
+          colors={({ id }) => id === "sales" ? "#2563eb" : "#10b981"}
+          groupMode="stacked"
+          axisLeft={{
+            legend: 'Units',
+            legendPosition: 'middle',
+            legendOffset: -40,
+          }}
+          legends={[
+            {
+              dataFrom: 'keys',
+              anchor: 'top-right',
+              direction: 'row',
+              translateY: -25,
+              itemsSpacing: 10,
+              itemWidth: 120,
+              itemHeight: 20,
+              symbolSize: 16,
+              symbolShape: 'circle',
+            }
+          ]}
+          tooltip={({ id, value, indexValue, color, data }) => (
+            <Box sx={{
+              bgcolor: "#fff",
+              border: `2px solid ${color}`,
+              borderRadius: 2,
+              px: 2,
+              py: 1,
+              minWidth: 120,
+              boxShadow: 2
+            }}>
+              <Typography sx={{ color: "#222", fontWeight: 700 }}>
+                {indexValue}
+              </Typography>
+              <Typography sx={{ color, mt: 0.5 }}>
+                {id === "sales" ? "Historical" : "Forecasted"}: <strong>{value}</strong>
+              </Typography>
+            </Box>
+          )}
+        />
       </Box>
     </>
   );
@@ -698,6 +775,8 @@ function Dashboard1() {
   // The FULL dataset, never overwritten!
   const [fullTimeSeriesData, setFullTimeSeriesData] = useState([]);
   const [timeSeriesData, setTimeSeriesData] = useState([]);
+  const [productSalesBreakdown, setProductSalesBreakdown] = useState([]);
+
 
   // Only these filters can trigger date resets:
   const [filters, setFilters] = useState({
@@ -709,7 +788,6 @@ function Dashboard1() {
   });
   const [activeRange, setActiveRange] = useState('All');
 
-  // --- INIT on Mount ---
   useEffect(() => {
     const fetchInit = async () => {
       setLoading(true);
@@ -842,6 +920,47 @@ function Dashboard1() {
     // eslint-disable-next-line
   }, [filters.model, filters.region, filters.productFamily, filters.startDate, filters.endDate]);
 
+  // Product-sales breakdown chart
+  useEffect(() => {
+  if (
+    filters.region &&
+    filters.region !== "All Stores" &&
+    filters.productFamily &&
+    filters.productFamily !== "All Products"
+  ) {
+    const fetchProductSalesBreakdown = async () => {
+      try {
+        const token = Cookies.get("authToken");
+        const params = new URLSearchParams();
+        params.append("store", filters.region);
+        params.append("product", filters.productFamily);
+        if (filters.startDate) params.append("start", filters.startDate);
+        if (filters.endDate) params.append("end", filters.endDate);
+
+        const response = await fetch(
+          `${DASHBOARD_ENDPOINT}?${params.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        if (!response.ok) throw new Error("Failed to load product sales breakdown");
+        const res = await response.json();
+        setProductSalesBreakdown(res.productSalesBreakdown || []);
+      } catch (err) {
+        setProductSalesBreakdown([]);
+      }
+    };
+    fetchProductSalesBreakdown();
+  } else {
+    // If filters are not valid, clear the chart
+    setProductSalesBreakdown([]);
+  }
+}, [filters.region, filters.productFamily, filters.startDate, filters.endDate]);
+
+
   // --- Date Range quick-select handler ---
   const handleRangeClick = (range) => {
     if (!fullTimeSeriesData.length) return;
@@ -946,7 +1065,7 @@ function Dashboard1() {
             </Grid>
             <Grid item xs={12} md={6}>
               <ChartCard title="Product Sales vs Forecast" onExpand={() => setExpandedChart('prodforecast')}>
-                <ProductSalesBreakdown />
+                <ProductSalesBreakdown data={productSalesBreakdown} filters={filters} />
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>

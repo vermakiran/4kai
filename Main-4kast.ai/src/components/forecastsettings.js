@@ -750,16 +750,11 @@ const ForecastSettings = () => {
         },
         body: JSON.stringify(requestBody)
       });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API responded with status ${response.status}: ${errorText}`);
-      }
-      
+
       const result = await response.json();
       
-      if (result.status === "error") {
-        throw new Error(result.message || "Unknown error occurred");
+      if (!response.ok || result.status === "error") {
+        throw new Error(result.message || result.detail || `API responded with status ${response.status}`);
       }
 
       // Process forecast type and structure
