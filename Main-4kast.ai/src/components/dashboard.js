@@ -35,6 +35,13 @@ import { ResponsiveBar } from "@nivo/bar";
 import { ResponsiveHeatMap } from "@nivo/heatmap";
 import { ResponsiveLine } from "@nivo/line";
 
+// Recharts & Animation (For the new drill-down chart)
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, LineChart, Line,
+} from "recharts";
+import { FaChevronRight, FaHome } from "react-icons/fa";
+import { motion, AnimatePresence } from "framer-motion";
+
 // Other 3rd Party
 import GaugeChart from "react-gauge-chart";
 import Cookies from "js-cookie";
@@ -43,7 +50,206 @@ import Cookies from "js-cookie";
 import { DASHBOARD_ENDPOINT } from "./config";
 import { parseISO, format, isAfter, isBefore, isEqual, subDays, subMonths, startOfYear } from 'date-fns';
 
+// --- DATA FOR NEW DRILL-DOWN CHART ---
+const drillDownRegionData = [
+  { region: "North", Overforecast: 23, Underforecast: 12, Accurate: 65 },
+  { region: "South", Overforecast: 30, Underforecast: 20, Accurate: 50 },
+  { region: "East",  Overforecast: 18, Underforecast: 24, Accurate: 58 },
+  { region: "West",  Overforecast: 10, Underforecast: 15, Accurate: 75 },
+];
+const drillDownProductData = {
+  North: [
+    { product: "Apples", Overforecast: 5, Underforecast: 2, Accurate: 18 },
+    { product: "Oranges", Overforecast: 8, Underforecast: 4, Accurate: 17 },
+    { product: "Berries", Overforecast: 10, Underforecast: 6, Accurate: 30 },
+  ],
+  South: [
+    { product: "Bananas", Overforecast: 12, Underforecast: 8, Accurate: 10 },
+    { product: "Grapes", Overforecast: 8, Underforecast: 2, Accurate: 14 },
+    { product: "Melons", Overforecast: 10, Underforecast: 10, Accurate: 26 },
+  ],
+  East: [
+    { product: "Pears", Overforecast: 6, Underforecast: 11, Accurate: 14 },
+    { product: "Cherries", Overforecast: 7, Underforecast: 5, Accurate: 20 },
+    { product: "Peaches", Overforecast: 5, Underforecast: 8, Accurate: 24 },
+  ],
+  West: [
+    { product: "Apples", Overforecast: 2, Underforecast: 5, Accurate: 28 },
+    { product: "Bananas", Overforecast: 3, Underforecast: 2, Accurate: 20 },
+    { product: "Avocados", Overforecast: 5, Underforecast: 8, Accurate: 27 },
+  ],
+};
+// *** FIX: ADDED COMPLETE MOCK DATA FOR ALL REGIONS/PRODUCTS ***
+const drillDownTimeSeriesData = {
+  North: {
+    Apples: [
+      { date: "06-01", Overforecast: 1, Underforecast: 0, Accurate: 5 }, { date: "06-02", Overforecast: 0, Underforecast: 1, Accurate: 6 }, { date: "06-03", Overforecast: 1, Underforecast: 0, Accurate: 4 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 2 }, { date: "06-05", Overforecast: 1, Underforecast: 0, Accurate: 1 },
+    ],
+    Oranges: [
+       { date: "06-01", Overforecast: 2, Underforecast: 1, Accurate: 4 }, { date: "06-02", Overforecast: 1, Underforecast: 0, Accurate: 3 }, { date: "06-03", Overforecast: 2, Underforecast: 2, Accurate: 5 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 2 }, { date: "06-05", Overforecast: 2, Underforecast: 0, Accurate: 3 },
+    ],
+    Berries: [
+       { date: "06-01", Overforecast: 3, Underforecast: 1, Accurate: 8 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 9 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 7 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 6 }, { date: "06-05", Overforecast: 2, Underforecast: 1, Accurate: 10 },
+    ],
+  },
+  South: {
+    Bananas: [
+       { date: "06-01", Overforecast: 4, Underforecast: 2, Accurate: 2 }, { date: "06-02", Overforecast: 3, Underforecast: 3, Accurate: 3 }, { date: "06-03", Overforecast: 2, Underforecast: 1, Accurate: 1 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 2 }, { date: "06-05", Overforecast: 2, Underforecast: 1, Accurate: 2 },
+    ],
+    Grapes: [
+       { date: "06-01", Overforecast: 2, Underforecast: 0, Accurate: 4 }, { date: "06-02", Overforecast: 2, Underforecast: 1, Accurate: 3 }, { date: "06-03", Overforecast: 1, Underforecast: 0, Accurate: 5 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 1 }, { date: "06-05", Overforecast: 1, Underforecast: 0, Accurate: 1 },
+    ],
+    Melons: [
+       { date: "06-01", Overforecast: 3, Underforecast: 3, Accurate: 5 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 7 }, { date: "06-03", Overforecast: 1, Underforecast: 2, Accurate: 6 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 4 }, { date: "06-05", Overforecast: 2, Underforecast: 2, Accurate: 4 },
+    ],
+  },
+  East: {
+    Pears: [
+       { date: "06-01", Overforecast: 1, Underforecast: 4, Accurate: 3 }, { date: "06-02", Overforecast: 2, Underforecast: 3, Accurate: 5 }, { date: "06-03", Overforecast: 1, Underforecast: 2, Accurate: 4 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 1 }, { date: "06-05", Overforecast: 1, Underforecast: 1, Accurate: 1 },
+    ],
+    Cherries: [
+       { date: "06-01", Overforecast: 2, Underforecast: 1, Accurate: 6 }, { date: "06-02", Overforecast: 1, Underforecast: 2, Accurate: 5 }, { date: "06-03", Overforecast: 2, Underforecast: 1, Accurate: 4 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 3 }, { date: "06-05", Overforecast: 1, Underforecast: 0, Accurate: 2 },
+    ],
+    Peaches: [
+       { date: "06-01", Overforecast: 1, Underforecast: 2, Accurate: 7 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 8 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 5 }, { date: "06-04", Overforecast: 0, Underforecast: 2, Accurate: 3 }, { date: "06-05", Overforecast: 1, Underforecast: 1, Accurate: 1 },
+    ],
+  },
+  West: {
+    Apples: [
+       { date: "06-01", Overforecast: 0, Underforecast: 1, Accurate: 8 }, { date: "06-02", Overforecast: 1, Underforecast: 2, Accurate: 9 }, { date: "06-03", Overforecast: 0, Underforecast: 1, Accurate: 6 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 3 }, { date: "06-05", Overforecast: 0, Underforecast: 0, Accurate: 2 },
+    ],
+    Bananas: [
+       { date: "06-01", Overforecast: 1, Underforecast: 0, Accurate: 6 }, { date: "06-02", Overforecast: 0, Underforecast: 1, Accurate: 5 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 4 }, { date: "06-04", Overforecast: 1, Underforecast: 0, Accurate: 3 }, { date: "06-05", Overforecast: 0, Underforecast: 0, Accurate: 2 },
+    ],
+    Avocados: [
+       { date: "06-01", Overforecast: 1, Underforecast: 2, Accurate: 9 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 8 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 5 }, { date: "06-04", Overforecast: 0, Underforecast: 2, Accurate: 4 }, { date: "06-05", Overforecast: 1, Underforecast: 1, Accurate: 1 },
+    ],
+  },
+};
 
+// --- DRILL-DOWN CHART COMPONENT ---
+function DrillDownErrorChart({ regionData, productData, timeSeriesData }) {
+  const [selectedRegion, setSelectedRegion] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+
+  const theme = {
+      text: "#232a39",
+      highlight: "#1e40af",
+  };
+
+  const renderBreadcrumbs = () => (
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 16, gap: 8, fontSize: 16, color: theme.text }}>
+      <span style={{ cursor: "pointer", display: "flex", alignItems: "center", fontWeight: 600 }} onClick={() => { setSelectedRegion(null); setSelectedProduct(null); }}>
+        <FaHome style={{ marginRight: 4 }} /> Regions
+      </span>
+      {selectedRegion && (
+        <>
+          <FaChevronRight size={12} />
+          <span style={{ fontWeight: selectedProduct ? 400 : 600, color: selectedProduct ? theme.text : theme.highlight, cursor: selectedProduct ? "pointer" : "default" }} onClick={() => selectedProduct && setSelectedProduct(null)}>
+            {selectedRegion}
+          </span>
+        </>
+      )}
+      {selectedProduct && (
+        <>
+          <FaChevronRight size={12} />
+          <span style={{ fontWeight: 600, color: theme.highlight }}>
+            {selectedProduct}
+          </span>
+        </>
+      )}
+    </div>
+  );
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <Paper elevation={3} sx={{ padding: '8px 12px', fontSize: 14 }}>
+          <strong>{label}</strong>
+          <ul style={{ listStyle: "none", margin: 0, padding: '4px 0 0 0' }}>
+            {payload.map((p, i) => (
+              <li key={i} style={{ color: p.color, fontWeight: 500 }}>
+                {p.name}: <span style={{ fontWeight: 700 }}>{p.value}</span>
+              </li>
+            ))}
+          </ul>
+        </Paper>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <Box sx={{ p: { xs: 1, sm: 2 }, fontFamily: "Inter,sans-serif" }}>
+       <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>Forecast Error Distribution</Typography>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={selectedRegion + "_" + selectedProduct}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.35 }}
+        >
+          {renderBreadcrumbs()}
+          
+          {!selectedRegion && (
+            <Box>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={regionData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }} barCategoryGap="25%" onClick={(state) => state && state.activeLabel && setSelectedRegion(state.activeLabel)} style={{ cursor: "pointer" }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="region" type="category" width={50} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f5f5f5' }}/>
+                  <Legend iconType="circle" />
+                  <Bar dataKey="Overforecast" stackId="a" fill="#ef4444" radius={[0, 10, 10, 0]} />
+                  <Bar dataKey="Underforecast" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="Accurate" stackId="a" fill="#22c55e" radius={[0, 10, 10, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <Typography variant="caption" sx={{ mt: 1, display: 'block', textAlign: 'center', color: 'text.secondary' }}>Click a region to drill down.</Typography>
+            </Box>
+          )}
+
+          {selectedRegion && !selectedProduct && (
+            <Box>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={productData[selectedRegion]} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }} barCategoryGap="25%" onClick={(state) => state && state.activeLabel && setSelectedProduct(state.activeLabel)} style={{ cursor: "pointer" }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis type="number" />
+                  <YAxis dataKey="product" type="category" width={70} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f5f5f5' }} />
+                  <Legend iconType="circle" />
+                  <Bar dataKey="Overforecast" stackId="a" fill="#ef4444" radius={[0, 10, 10, 0]} />
+                  <Bar dataKey="Underforecast" stackId="a" fill="#3b82f6" />
+                  <Bar dataKey="Accurate" stackId="a" fill="#22c55e" radius={[0, 10, 10, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <Typography variant="caption" sx={{ mt: 1, display: 'block', textAlign: 'center', color: 'text.secondary' }}>Click a product to see its time series.</Typography>
+            </Box>
+          )}
+
+          {selectedRegion && selectedProduct && (
+            <Box>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={(timeSeriesData[selectedRegion] && timeSeriesData[selectedRegion][selectedProduct]) || []} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend iconType="circle" />
+                  <Line type="monotone" dataKey="Overforecast" stroke="#ef4444" strokeWidth={2} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="Underforecast" stroke="#3b82f6" strokeWidth={2} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="Accurate" stroke="#22c55e" strokeWidth={2} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+              <Typography variant="caption" sx={{ mt: 1, display: 'block', textAlign: 'center', color: 'text.secondary' }}>Use breadcrumbs to navigate back.</Typography>
+            </Box>
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </Box>
+  );
+}
 
 
 function Dashboard({ children }) {
@@ -454,37 +660,6 @@ function CorrelationHeatmap({ showTitle = true } ={}) {
           animate={true}
           enableLabels={true}
           isInteractive={true}
-        />
-      </Box>
-    </>
-  );
-}
-
-function ErrorDistributionChart({ showTitle = true } ={}) {
-  const data = [
-    { region: 'TX', 'Under Forecast': 16, 'Over Forecast': 12, 'Accurate': 37 },
-    { region: 'Cali', 'Under Forecast': 19, 'Over Forecast': 16, 'Accurate': 24 },
-    { region: 'NYC', 'Under Forecast': 18, 'Over Forecast': 14, 'Accurate': 76 },
-    { region: 'CHI', 'Under Forecast': 14, 'Over Forecast': 18, 'Accurate': 63 }
-  ];
-  return (
-    <>
-    {showTitle && (
-      <Typography variant="h6" gutterBotton
-      gutterBottom>Forecast Error Distribution by Region</Typography> )}
-      <Box sx={{ height: 'calc(100% - 40px)' }}>
-        <ResponsiveBar data={data} 
-        keys={['Under Forecast', 'Over Forecast', 'Accurate']} 
-        layout="horizontal"
-        indexBy="region" 
-        colors={({ id }) => {
-          switch (id) {
-            case 'Under Forecast': return '#ef4444';     // light red
-            case 'Over Forecast': return '#3b82f6';       // light orange
-            case 'Accurate': return '#22c55e';            // light green
-            default: return '#e5e7eb';                    // fallback neutral
-          }
-        }}
         />
       </Box>
     </>
@@ -1054,8 +1229,12 @@ function Dashboard1() {
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>
-              <ChartCard title="Forecast Error Distribution by Region" onExpand={() => setExpandedChart('errordist')}>
-                <ErrorDistributionChart />
+              <ChartCard title="Forecast Error Drilldown" onExpand={() => setExpandedChart('drilldown')}>
+                <DrillDownErrorChart
+                  regionData={drillDownRegionData}
+                  productData={drillDownProductData}
+                  timeSeriesData={drillDownTimeSeriesData}
+                />
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>
@@ -1080,7 +1259,7 @@ function Dashboard1() {
             title={
               expandedChart === 'timeseries' ? 'Forecast vs Actual - Expanded View'
                 : expandedChart === 'correlation' ? 'Feature Correlation - Expanded View'
-                  : expandedChart === 'errordist' ? 'Forecast Error Distribution - Expanded View'
+                  : expandedChart === 'drilldown' ? 'Forecast Error Drilldown - Expanded View'
                     : expandedChart === 'DVIndex' ? 'Demand Volatility Index - Expanded View'
                       : expandedChart === 'prodforecast' ? 'Product Sales vs Forecast - Expanded View'
                         : expandedChart === 'FAAnalysis' ? 'Forecast Accuracy Analysis - Expanded View'
@@ -1104,9 +1283,13 @@ function Dashboard1() {
                 <CorrelationHeatmap showTitle={false} />
               </ChartWrapper>
             )}
-            {expandedChart === 'errordist' && (
+            {expandedChart === 'drilldown' && (
               <ChartWrapper>
-                <ErrorDistributionChart showTitle={false} />
+                <DrillDownErrorChart
+                  regionData={drillDownRegionData}
+                  productData={drillDownProductData}
+                  timeSeriesData={drillDownTimeSeriesData}
+                />
               </ChartWrapper>
             )}
             {expandedChart === 'DVIndex' && <DemandVolatilityGauge />}

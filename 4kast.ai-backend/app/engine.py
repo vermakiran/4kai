@@ -2291,6 +2291,7 @@ def upsert_full_forecast_run(conn, runid, historical_records, forecast_records, 
                 record.get("RMSE"),
                 record.get("BIAS"),
                 record.get("MAE"),
+                runid
             )
             for record in forecast_records
         ]
@@ -2299,8 +2300,8 @@ def upsert_full_forecast_run(conn, runid, historical_records, forecast_records, 
                 '''
                 INSERT INTO "DBADMIN"."FORECASTDATA"
                 ("FORECASTID", "PRODUCTID", "STOREID", "FORECASTDATE",
-                 "PREDICTEDDEMAND", "MAPE", "RMSE", "BIAS", "MAE")
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 "PREDICTEDDEMAND", "MAPE", "RMSE", "BIAS", "MAE","RUNID")
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?,?)
                 ''',
                 fcst_values
             )
@@ -2330,10 +2331,10 @@ def split_and_bulk_insert(conn, df_hist, df_forecast, forecast_id):
             "StoreID": row.get("Store") or row.get("StoreID"),
             "Date": row.get("Date"),
             "PredictedDemand": row.get("Forecast"),
-            "MAPE": row.get("val_1"),
-            "RMSE": row.get("val_2"),
-            "MAE": row.get("val_3"),
-            "BIAS": row.get("val_4"),
+            "MAPE": row.get("MAPE"),   
+            "RMSE": row.get("RMSE"),   
+            "MAE": row.get("MAE"),     
+            "BIAS": row.get("BIAS")
         }
         for _, row in df_forecast.iterrows()
     ]
@@ -2343,7 +2344,7 @@ def split_and_bulk_insert(conn, df_hist, df_forecast, forecast_id):
         forecast_id,
         historical_records,
         forecast_records,
-        wipe_old=False
+        wipe_old=True
     )
     print(f"Inserted {hist_count} historical rows and {fcst_count} forecast rows for forecast_id={forecast_id}")
     
