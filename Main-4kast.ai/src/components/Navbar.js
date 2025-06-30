@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Navbar, Container, Nav, Form, FormControl } from "react-bootstrap";
+import { Navbar, Container, Nav } from "react-bootstrap";
 import { FaBell, FaCog, FaUser } from "react-icons/fa";
 import { Link } from "react-router-dom"; // Import Link for navigation
 import Cookies from 'js-cookie'; // Import Cookies to access cookie data
@@ -29,20 +29,11 @@ function CustomNavbar() {
 
   return (
     <Navbar expand="lg" className="custom-navbar">
-      <Container fluid>
+      <Container fluid style={{ paddingLeft: '5px' }}>
         {/* Left Side: Logo */}
         <Navbar.Brand href="#home" className="navbar-logo">
           <img src={logo} alt="4kast.ai Logo" className="navbar-logo" />
         </Navbar.Brand>
-
-        {/* Center: Search Bar */}
-        <Form className="search-bar">
-          <FormControl
-            type="search"
-            placeholder="Search anything here..."
-            className="search-input"
-          />
-        </Form>
 
         {/* Right Side: Icons */}
         <Nav className="navbar-icons">

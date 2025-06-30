@@ -3,6 +3,7 @@ import Cookies from 'js-cookie';
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { UPLOAD_FILE_ENDPOINT, BASE_URL } from './config';
+import PageTitle from './PageTitle';
 import "../App.css";
 
 // Custom Alert Component
@@ -488,6 +489,7 @@ debugger;
 
   return (
     <div className="import-data-container">
+      <PageTitle title="Import Data" />
       <CustomAlert
         isOpen={alert.isOpen}
         message={alert.message}

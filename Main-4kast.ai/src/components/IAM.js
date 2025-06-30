@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import Cookies from "js-cookie";
+import PageTitle from "./PageTitle";
 import {
   LIST_USERS_ENDPOINT,
   CREATE_USER_ENDPOINT,
@@ -399,276 +400,270 @@ export default function IAMPage() {
   };
 
   return (
-    <div
-      style={{
-        maxWidth: 1100,
-        margin: "0 auto",
-        fontFamily:
-          'Inter, "SF Pro Display", "Segoe UI", Arial, system-ui, sans-serif',
-      }}
-    >
-      <div
-        style={{
-          margin: "34px 0 18px 0",
-          padding: "28px 30px 18px 30px",
-          background: "#fff",
-          borderRadius: "22px",
-          boxShadow: "0 2px 24px #cfd5e322",
-          border: "1px solid #eff0f4",
-        }}
-      >
-        <h2 style={{ fontWeight: 700, fontSize: 27, margin: 0, color: "#15191f" }}>
-          Identity & Access Management
-        </h2>
+    <>
+      <PageTitle title="Admin Settings" />
+      <div className="iam-container">
         <div
           style={{
-            color: "#adb0b6",
-            fontSize: 16,
-            margin: "4px 0 26px 1px",
+            maxWidth: 1100,
+            margin: "0 auto",
+            fontFamily:
+              'Inter, "SF Pro Display", "Segoe UI", Arial, system-ui, sans-serif',
           }}
         >
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 20,
-            alignItems: "center",
-            marginBottom: 20,
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Full name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+          <div
             style={{
-              padding: "10px 16px",
-              borderRadius: 9,
-              border: "1.5px solid #e6e8ef",
-              fontSize: 16,
-              width: 190,
-              background: "#fcfdfe",
-              fontWeight: 500,
-            }}
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 9,
-              border: "1.5px solid #e6e8ef",
-              fontSize: 16,
-              width: 220,
-              background: "#fcfdfe",
-              fontWeight: 500,
-            }}
-          />
-          <select
-            value={newRole}
-            onChange={(e) => setNewRole(e.target.value)}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 9,
-              border: "1.5px solid #e6e8ef",
-              fontSize: 16,
-              minWidth: 120,
-              background: "#fcfdfe",
-              fontWeight: 500,
-            }}
-          >
-            {roles.map((role) => (
-              <option key={role}>{role}</option>
-            ))}
-          </select>
-          <input
-            type="text"
-            placeholder="Employee ID"
-            value={newEmpId}
-            onChange={(e) => setNewEmpId(e.target.value)}
-            style={{
-              padding: "10px 16px",
-              borderRadius: 9,
-              border: "1.5px solid #e6e8ef",
-              fontSize: 16,
-              width: 150,
-              background: "#fcfdfe",
-              fontWeight: 500,
-            }}
-          />
-          <button
-            onClick={() => setShowAddModal(true)}
-            style={{
-              background: "#111827",
-              color: "#fff",
-              fontWeight: 600,
-              border: "none",
-              borderRadius: 10,
-              padding: "11px 34px",
-              fontSize: 16,
-              marginLeft: 8,
-              cursor: "pointer",
-              letterSpacing: 0.1,
-              boxShadow: "0 2px 12px #11182713",
-            }}
-          >
-            Add user
-          </button>
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginTop: 22,
-          padding: "28px 30px 22px 30px",
-          background: "#fff",
-          borderRadius: "22px",
-          boxShadow: "0 2px 24px #cfd5e322",
-          border: "1px solid #eff0f4",
-        }}
-      >
-        <h2
-          style={{
-            fontWeight: 700,
-            fontSize: 21,
-            margin: "0 0 18px 0",
-            color: "#222",
-            letterSpacing: 0,
-          }}
-        >
-          Current users
-        </h2>
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              borderSpacing: 0,
-              fontSize: 16,
+              margin: "34px 0 18px 0",
+              padding: "28px 30px 18px 30px",
               background: "#fff",
-              borderRadius: 18,
-              overflow: "hidden",
-              boxShadow: "0 2px 18px #ebedf526",
+              borderRadius: "22px",
+              boxShadow: "0 2px 24px #cfd5e322",
+              border: "1px solid #eff0f4",
             }}
           >
-            <thead>
-              <tr
+            <div
+              style={{
+                display: "flex",
+                gap: 20,
+                alignItems: "center",
+                marginBottom: 20,
+              }}
+            >
+              <input
+                type="text"
+                placeholder="Full name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
                 style={{
-                  borderBottom: "2.5px solid #edeef2",
-                  color: "#232324",
-                  fontWeight: 700,
-                  background: "#fafbfc",
-                  fontSize: 17,
-                  letterSpacing: 0.03,
+                  padding: "10px 16px",
+                  borderRadius: 9,
+                  border: "1.5px solid #e6e8ef",
+                  fontSize: 16,
+                  width: 190,
+                  background: "#fcfdfe",
+                  fontWeight: 500,
+                }}
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 9,
+                  border: "1.5px solid #e6e8ef",
+                  fontSize: 16,
+                  width: 220,
+                  background: "#fcfdfe",
+                  fontWeight: 500,
+                }}
+              />
+              <select
+                value={newRole}
+                onChange={(e) => setNewRole(e.target.value)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 9,
+                  border: "1.5px solid #e6e8ef",
+                  fontSize: 16,
+                  minWidth: 120,
+                  background: "#fcfdfe",
+                  fontWeight: 500,
                 }}
               >
-                <th style={{ textAlign: "left", padding: "13px 16px" }}>Name</th>
-                <th style={{ textAlign: "left", padding: "13px 16px" }}>Email</th>
-                <th style={{ textAlign: "left", padding: "13px 16px" }}>Role</th>
-                <th style={{ textAlign: "left", padding: "13px 16px" }}>Employee ID</th>
-                <th style={{ textAlign: "left", padding: "13px 16px" }}>Org ID</th>
-                <th style={{ textAlign: "center", padding: "13px 16px" }}>Active</th>
-                <th style={{ width: 46 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {people.map((p, i) => (
-                <tr
-                  key={p.userid}
-                  style={{
-                    borderBottom: "1.5px solid #f3f4f8",
-                    background: i % 2 ? "#fcfcfd" : "#fff",
-                    transition: "background 0.16s",
-                  }}
-                  onMouseEnter={e =>
-                    (e.currentTarget.style.background = "#f4f8fd")
-                  }
-                  onMouseLeave={e =>
-                    (e.currentTarget.style.background = i % 2 ? "#fcfcfd" : "#fff")
-                  }
-                >
-                  <td style={{ padding: "13px 16px" }}>{p.full_name}</td>
-                  <td
+                {roles.map((role) => (
+                  <option key={role}>{role}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Employee ID"
+                value={newEmpId}
+                onChange={(e) => setNewEmpId(e.target.value)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 9,
+                  border: "1.5px solid #e6e8ef",
+                  fontSize: 16,
+                  width: 150,
+                  background: "#fcfdfe",
+                  fontWeight: 500,
+                }}
+              />
+              <button
+                onClick={() => setShowAddModal(true)}
+                style={{
+                  background: "#111827",
+                  color: "#fff",
+                  fontWeight: 600,
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "11px 34px",
+                  fontSize: 16,
+                  marginLeft: 8,
+                  cursor: "pointer",
+                  letterSpacing: 0.1,
+                  boxShadow: "0 2px 12px #11182713",
+                }}
+              >
+                Add user
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 22,
+              padding: "28px 30px 22px 30px",
+              background: "#fff",
+              borderRadius: "22px",
+              boxShadow: "0 2px 24px #cfd5e322",
+              border: "1px solid #eff0f4",
+            }}
+          >
+            <h2
+              style={{
+                fontWeight: 700,
+                fontSize: 21,
+                margin: "0 0 18px 0",
+                color: "#222",
+                letterSpacing: 0,
+              }}
+            >
+              Current users
+            </h2>
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  borderSpacing: 0,
+                  fontSize: 16,
+                  background: "#fff",
+                  borderRadius: 18,
+                  overflow: "hidden",
+                  boxShadow: "0 2px 18px #ebedf526",
+                }}
+              >
+                <thead>
+                  <tr
                     style={{
-                      padding: "13px 16px",
-                      fontFamily: "monospace",
-                      color: "#324472",
+                      borderBottom: "2.5px solid #edeef2",
+                      color: "#232324",
+                      fontWeight: 700,
+                      background: "#fafbfc",
+                      fontSize: 17,
                       letterSpacing: 0.03,
                     }}
                   >
-                    {p.email}
-                  </td>
-                  <td style={{ padding: "13px 16px" }}>{p.role}</td>
-                  <td style={{ padding: "13px 16px" }}>{p.employee_id}</td>
-                  <td style={{ padding: "13px 16px" }}>{`${p.org_id}`}</td>
-                  <td style={{ textAlign: "center", padding: "13px 16px" }}>
-                    <StyledCheckbox
-                      checked={p.isactive}
-                      onChange={() =>
-                        handleToggleStatus(p.userid, !p.isactive)
+                    <th style={{ textAlign: "left", padding: "13px 16px" }}>Name</th>
+                    <th style={{ textAlign: "left", padding: "13px 16px" }}>Email</th>
+                    <th style={{ textAlign: "left", padding: "13px 16px" }}>Role</th>
+                    <th style={{ textAlign: "left", padding: "13px 16px" }}>Employee ID</th>
+                    <th style={{ textAlign: "left", padding: "13px 16px" }}>Org ID</th>
+                    <th style={{ textAlign: "center", padding: "13px 16px" }}>Active</th>
+                    <th style={{ width: 46 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {people.map((p, i) => (
+                    <tr
+                      key={p.userid}
+                      style={{
+                        borderBottom: "1.5px solid #f3f4f8",
+                        background: i % 2 ? "#fcfcfd" : "#fff",
+                        transition: "background 0.16s",
+                      }}
+                      onMouseEnter={e =>
+                        (e.currentTarget.style.background = "#f4f8fd")
                       }
-                    />
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    <RowMenu
-                      onDeactivate={() => handleToggleStatus(p.userid, false)}
-                      onDelete={() => openDeleteDialog(p.userid)}
-                    />
-                  </td>
-                </tr>
-              ))}
-              {people.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: "center", color: "#888" }}>
-                    No users found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                      onMouseLeave={e =>
+                        (e.currentTarget.style.background = i % 2 ? "#fcfcfd" : "#fff")
+                      }
+                    >
+                      <td style={{ padding: "13px 16px" }}>{p.full_name}</td>
+                      <td
+                        style={{
+                          padding: "13px 16px",
+                          fontFamily: "monospace",
+                          color: "#324472",
+                          letterSpacing: 0.03,
+                        }}
+                      >
+                        {p.email}
+                      </td>
+                      <td style={{ padding: "13px 16px" }}>{p.role}</td>
+                      <td style={{ padding: "13px 16px" }}>{p.employee_id}</td>
+                      <td style={{ padding: "13px 16px" }}>{`${p.org_id}`}</td>
+                      <td style={{ textAlign: "center", padding: "13px 16px" }}>
+                        <StyledCheckbox
+                          checked={p.isactive}
+                          onChange={() =>
+                            handleToggleStatus(p.userid, !p.isactive)
+                          }
+                        />
+                      </td>
+                      <td style={{ textAlign: "center" }}>
+                        <RowMenu
+                          onDeactivate={() => handleToggleStatus(p.userid, false)}
+                          onDelete={() => openDeleteDialog(p.userid)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {people.length === 0 && (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: "center", color: "#888" }}>
+                        No users found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <ConfirmModal
+            open={showDeleteModal}
+            onCancel={() => {
+              setShowDeleteModal(false);
+              setDeleteUserId(null);
+            }}
+            onConfirm={handleDeleteUser}
+            title="Delete user?"
+            message="Are you sure you want to delete this user? This cannot be undone."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            confirmColor="#e53e3e"
+          />
+
+          <ConfirmModal
+            open={showAddModal}
+            onCancel={() => setShowAddModal(false)}
+            onConfirm={() => {
+              setShowAddModal(false);
+              handleAddPerson();
+            }}
+            title="Add new user?"
+            message="Are you sure you want to add this user?"
+            confirmLabel="Add"
+            cancelLabel="Cancel"
+            confirmColor="#10b981"
+          />
+
+          <ConfirmModal
+            open={showErrorModal.open}
+            onCancel={() => setShowErrorModal({ open: false, message: "" })}
+            onConfirm={() => setShowErrorModal({ open: false, message: "" })}
+            title="Error"
+            message={showErrorModal.message}
+            confirmLabel="OK"
+            cancelLabel=""    // Only show one button for error modal
+            confirmColor="#2563eb"
+          />
+
         </div>
       </div>
-      <ConfirmModal
-        open={showDeleteModal}
-        onCancel={() => {
-          setShowDeleteModal(false);
-          setDeleteUserId(null);
-        }}
-        onConfirm={handleDeleteUser}
-        title="Delete user?"
-        message="Are you sure you want to delete this user? This cannot be undone."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        confirmColor="#e53e3e"
-      />
-
-      <ConfirmModal
-        open={showAddModal}
-        onCancel={() => setShowAddModal(false)}
-        onConfirm={() => {
-          setShowAddModal(false);
-          handleAddPerson();
-        }}
-        title="Add new user?"
-        message="Are you sure you want to add this user?"
-        confirmLabel="Add"
-        cancelLabel="Cancel"
-        confirmColor="#10b981"
-      />
-
-      <ConfirmModal
-        open={showErrorModal.open}
-        onCancel={() => setShowErrorModal({ open: false, message: "" })}
-        onConfirm={() => setShowErrorModal({ open: false, message: "" })}
-        title="Error"
-        message={showErrorModal.message}
-        confirmLabel="OK"
-        cancelLabel=""    // Only show one button for error modal
-        confirmColor="#2563eb"
-      />
-
-    </div>
+    </>
   );
 }

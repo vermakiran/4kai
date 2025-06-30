@@ -3,6 +3,7 @@ import moment from 'moment';
 import { useAuth } from '../AuthContext';
 import { PLANNERWB_ENDPOINT } from "./config"; 
 import Cookies from "js-cookie";
+import PageTitle from './PageTitle';
 
 function aggregateTableData(tableData, timeBucket) {
   if (!tableData) return [];
@@ -394,143 +395,144 @@ const allDates = filteredTableData
 
 
   return (
-    <div className="planner-container">
-      <h2 className="planner-workbench">Planner Workbench</h2>
+    <>
+      <PageTitle title="Planner Workbench" />
+      <div className="planner-container">
+        <div className="demand-plan">
+          <h3>Demand Plan</h3>
 
-      <div className="demand-plan">
-        <h3>Demand Plan</h3>
-
-        {/* Display Settings */}
-        <div className="card display-settings">
-          <h3 className="card-header">Display Settings</h3>
-          <div className="card-body">
-            <div className="input-group">
-              <label>Product</label>
-              <select
-                value={selectedProduct}
-                onChange={(e) => setSelectedProduct(e.target.value)}
-              >
-                <option value="">All Products</option>
-                <option value="none">No Product</option>
-                {products.map(product => (
-                  <option key={product} value={product}>{product}</option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <label>Location</label>
-              <select
-                value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-              >
-                <option value="">All Locations</option>
-                <option value="none">No Store</option>
-                {stores.map(store => (
-                  <option key={store} value={store}>{store}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Time Horizon */}
-        <div className="card time-horizon">
-          <h3 className="card-header">Time Horizon</h3>
-          <div className="card-body">
-            <div className="input-group">
-              <label>Time Bucket</label>
-              <select
-                value={timeBucket}
-                onChange={(e) => setTimeBucket(e.target.value)}
-              >
-                <option value="Daily">Daily</option>
-                <option value="Monthly">Monthly</option>
-                <option value="Yearly">Yearly</option>
-              </select>
-            </div>
-            <div className="input-group">
-              <label>Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="input-group">
-              <label>End Date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="action-buttons">
-          <button
-            className={`edit-button ${isEditing ? "active" : ""}`}
-            onClick={() => setIsEditing(!isEditing)}
-          >
-            {isEditing ? "Cancel Edit" : "Edit Forecast"}
-          </button>
-          <button
-            className="save-button"
-            onClick={handleSaveClick}
-            disabled={!isEditing}
-          >
-            Save
-          </button>
-          <button
-            className="refresh-button"
-            onClick={handleRefresh}
-          >
-            Refresh
-          </button>
-        </div>
-
-        {/* Worksheet */}
-        {renderWorksheet()}
-      </div>
-
-      {/* Add the save dialog */}
-      {showSaveDialog && (
-        <div className="save-dialog-overlay">
-          <div className="save-dialog">
-            <h3>Save Changes</h3>
-            <div className="dialog-content">
+          {/* Display Settings */}
+          <div className="card display-settings">
+            <h3 className="card-header">Display Settings</h3>
+            <div className="card-body">
               <div className="input-group">
-                <label>Reason:</label>
+                <label>Product</label>
+                <select
+                  value={selectedProduct}
+                  onChange={(e) => setSelectedProduct(e.target.value)}
+                >
+                  <option value="">All Products</option>
+                  <option value="none">No Product</option>
+                  {products.map(product => (
+                    <option key={product} value={product}>{product}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="input-group">
+                <label>Location</label>
+                <select
+                  value={selectedLocation}
+                  onChange={(e) => setSelectedLocation(e.target.value)}
+                >
+                  <option value="">All Locations</option>
+                  <option value="none">No Store</option>
+                  {stores.map(store => (
+                    <option key={store} value={store}>{store}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Time Horizon */}
+          <div className="card time-horizon">
+            <h3 className="card-header">Time Horizon</h3>
+            <div className="card-body">
+              <div className="input-group">
+                <label>Time Bucket</label>
+                <select
+                  value={timeBucket}
+                  onChange={(e) => setTimeBucket(e.target.value)}
+                >
+                  <option value="Daily">Daily</option>
+                  <option value="Monthly">Monthly</option>
+                  <option value="Yearly">Yearly</option>
+                </select>
+              </div>
+              <div className="input-group">
+                <label>Start Date</label>
                 <input
-                  type="text"
-                  value={saveReason}
-                  onChange={(e) => setSaveReason(e.target.value)}
-                  placeholder="Enter reason for change"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
                 />
               </div>
               <div className="input-group">
-                <label>Comment:</label>
-                <textarea
-                  value={saveComment}
-                  onChange={(e) => setSaveComment(e.target.value)}
-                  placeholder="Enter additional comments"
+                <label>End Date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
                 />
               </div>
             </div>
-            <div className="dialog-actions">
-              <button onClick={handleSaveCancel}>Cancel</button>
-              <button 
-                onClick={handleSaveConfirm}
-                disabled={!saveReason.trim()}
-              >
-                Save
-              </button>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="action-buttons">
+            <button
+              className={`edit-button ${isEditing ? "active" : ""}`}
+              onClick={() => setIsEditing(!isEditing)}
+            >
+              {isEditing ? "Cancel Edit" : "Edit Forecast"}
+            </button>
+            <button
+              className="save-button"
+              onClick={handleSaveClick}
+              disabled={!isEditing}
+            >
+              Save
+            </button>
+            <button
+              className="refresh-button"
+              onClick={handleRefresh}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {/* Worksheet */}
+          {renderWorksheet()}
+        </div>
+
+        {/* Add the save dialog */}
+        {showSaveDialog && (
+          <div className="save-dialog-overlay">
+            <div className="save-dialog">
+              <h3>Save Changes</h3>
+              <div className="dialog-content">
+                <div className="input-group">
+                  <label>Reason:</label>
+                  <input
+                    type="text"
+                    value={saveReason}
+                    onChange={(e) => setSaveReason(e.target.value)}
+                    placeholder="Enter reason for change"
+                  />
+                </div>
+                <div className="input-group">
+                  <label>Comment:</label>
+                  <textarea
+                    value={saveComment}
+                    onChange={(e) => setSaveComment(e.target.value)}
+                    placeholder="Enter additional comments"
+                  />
+                </div>
+              </div>
+              <div className="dialog-actions">
+                <button onClick={handleSaveCancel}>Cancel</button>
+                <button 
+                  onClick={handleSaveConfirm}
+                  disabled={!saveReason.trim()}
+                >
+                  Save
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 };
 

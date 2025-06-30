@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import PageTitle from "./PageTitle";
 import {
   FaArrowLeft,
   FaUser,
@@ -101,9 +102,7 @@ function Settings() {
   return (
     <div className="settings-container">
       {/* Header Section */}
-      <div className="settings-header">
-        <h2>Settings</h2>
-      </div>
+      <PageTitle title="Settings" />
 
       {/* Search Bar */}
       <div className="settings-search">

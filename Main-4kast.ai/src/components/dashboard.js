@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import PageTitle from "./PageTitle";
 
 // MUI Core & Theme
 import { ThemeProvider, createTheme } from "@mui/material/styles";
@@ -1208,12 +1209,7 @@ function Dashboard1() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Dashboard>
-        <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-          <BarChart3 size={34} style={{ color: "#1e40af" }} />
-          <Typography variant="h2" sx={{ fontWeight: 900, letterSpacing: 0.5, color: "#1e40af" }}>
-            My Forecast Dashboard
-          </Typography>
-        </Box>
+        <PageTitle title="Dashboard" />
         <FilterBar
           filters={filters}
           onFilterChange={setFilters}
