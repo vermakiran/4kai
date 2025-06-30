@@ -4,7 +4,11 @@ gunicorn
 python-jose[cryptography]
 passlib[bcrypt]
 python-dotenv
+itsdangerous
+pyjwt
+authlib
 pydantic-settings
+pydantic[email]
 python-multipart
 hdbcli
 urllib3

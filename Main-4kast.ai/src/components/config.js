@@ -8,5 +8,10 @@ export const RUN_FORECAST_ENDPOINT = `${BASE_URL}/api/engine/run-forecast`; // E
 export const DASHBOARD_ENDPOINT = `${BASE_URL}/api/engine/dashboard-data`; // Endpoint for dashboard
 export const PLANNERWB_ENDPOINT = `${BASE_URL}/api/engine/planner-data`; // Endpoint for Planner-Workbench
 
+export const LIST_USERS_ENDPOINT = `${BASE_URL}/api/engine/list-users`;
+export const CREATE_USER_ENDPOINT = `${BASE_URL}/api/engine/create-user`;
+export const UPDATE_USER_STATUS_ENDPOINT = `${BASE_URL}/api/engine/user-status`;
+export const DELETE_USER_ENDPOINT = `${BASE_URL}/api/engine/user`;
+
 
 // export const BASE_URL = 'https://4kast-backend-v2.cfapps.eu10-005.hana.ondemand.com';  Base URL for the server

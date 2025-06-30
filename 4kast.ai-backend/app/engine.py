@@ -1,8 +1,9 @@
 # app/engine.py
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Form, status, Path, Query
 from fastapi.responses import FileResponse, Response, JSONResponse
 import plotly.graph_objects as go
 from .security import get_current_user, create_access_token, verify_password
+from fastapi.security import OAuth2PasswordRequestForm
 from .db import get_hana_connection
 from pmdarima import auto_arima
 from tensorflow.keras.layers import LSTM, Dense
@@ -15,7 +16,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error, 
 from sklearn.model_selection import train_test_split
 from statsmodels.tsa.seasonal import seasonal_decompose
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel, ExpSineSquared
-from app.models import LoginRequest, ForecastInput, UploadCleanedData, DeleteFileRequest
+from app.models import LoginRequest, ForecastInput, UploadCleanedData, DeleteFileRequest, UserCreate, UserOut 
 from fastapi.responses import FileResponse
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -45,15 +46,14 @@ import re
 from datetime import datetime, timedelta
 from datetime import date
 import glob
-from pydantic import BaseModel
+from pydantic import BaseModel, constr, EmailStr
 import seaborn as sns
 import plotly.express as px
 from .config import OrganizationCalendarConfig
 import pprint
 from typing import Optional
 import traceback
-
-
+from passlib.hash import bcrypt 
 
 router = APIRouter(prefix="/api/engine", tags=["engine"])
 @router.get("/status")
@@ -197,7 +197,6 @@ def determine_item_col(df, forecast_type):
             return "store_item"
     return None
 
-    
 # Update the data preprocessing section in the /upload-cleaned-data endpoint handler
 def process_uploaded_data(df, granularity, time_bucket, forecast_horizon, column_mappings, organization_id='default'):
     try:
@@ -3792,3 +3791,133 @@ async def list_organization_calendars(
         return {"calendars": calendars}
     except Exception as e:
         return {"status": "error", "message": f"Failed to list calendar configurations: {str(e)}"}
+
+@router.post("/create-user", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+async def create_user(payload: UserCreate, conn=Depends(get_hana_connection), current_user: dict = Depends(get_current_user)):
+    cur = conn.cursor()
+    try:
+        # FIX: Manually determine the next available USERID
+        cur.execute("SELECT MAX(USERID) FROM DBADMIN.USERS")
+        max_id_record = cur.fetchone()
+        # If the table is empty, max_id_record[0] will be None. Default to 0.
+        next_id = (max_id_record[0] or 0) + 1
+
+        cur.execute(
+            """
+            INSERT INTO DBADMIN.USERS
+                  (USERID, ORGID, USERNAME, EMAIL, PASSWORDHASH,
+                   ROLE, ISACTIVE, EMPLOYEEID, FULLNAME)
+            VALUES (?, 1, ?, ?, ?, ?, 1, ?, ?)
+            """,
+            (
+                next_id,                        
+                payload.email,                  
+                payload.email,
+                bcrypt.hash(payload.password),  
+                payload.role,
+                payload.employee_id,
+                payload.full_name,
+            ),
+        )
+        conn.commit()
+        
+        # We already know the new ID, so we don't need to query for it again.
+        return UserOut(
+            userid=next_id,
+            full_name=payload.full_name,
+            email=payload.email,
+            role=payload.role,
+            employee_id=payload.employee_id,
+            org_id=1,
+            isactive=True,
+        )
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(400, f"Create user failed: {e}")
+    finally:
+        cur.close()
+
+@router.get("/list-users", response_model=list[UserOut])
+async def list_users(conn=Depends(get_hana_connection), current_user: dict = Depends(get_current_user)):
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT USERID, FULLNAME, EMAIL, ROLE,
+               EMPLOYEEID, ORGID, ISACTIVE
+        FROM   DBADMIN.USERS
+        ORDER  BY USERID
+        """
+    )
+    rows = cur.fetchall()
+    cur.close()
+    return [
+        UserOut(
+            userid=r[0],
+            full_name=r[1],
+            email=r[2],
+            role=r[3],
+            employee_id=r[4],
+            org_id=r[5],
+            isactive=bool(r[6]),
+        )
+        for r in rows
+    ]
+
+
+@router.patch("/user-status/{userid}", response_model=dict)
+async def update_user_status(
+    userid: int = Path(..., gt=0),
+    isactive: bool = Query(True),
+    conn=Depends(get_hana_connection),
+    
+):
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            UPDATE DBADMIN.USERS
+            SET ISACTIVE = ?
+            WHERE USERID = ?
+            """,
+            (1 if isactive else 0, userid),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"User {userid} not found.")
+        conn.commit()
+        return {"userid": userid, "isactive": isactive, "status": "updated"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(400, f"Update failed: {e}")
+    finally:
+        cur.close()
+
+
+@router.delete("/user/{userid}", status_code=status.HTTP_200_OK)
+async def delete_user(
+    userid: int = Path(..., gt=0, description="The ID of the user to delete"),
+    conn=Depends(get_hana_connection),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Deletes a user from the database.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "DELETE FROM DBADMIN.USERS WHERE USERID = ?",
+            (userid,),
+        )
+        
+        # Check if a row was actually deleted
+        if cur.rowcount == 0:
+            conn.rollback()
+            raise HTTPException(status_code=404, detail=f"User with ID {userid} not found.")
+            
+        conn.commit()
+        return {"status": "success", "message": f"User {userid} has been deleted."}
+        
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete user: {e}")
+    finally:
+        cur.close()

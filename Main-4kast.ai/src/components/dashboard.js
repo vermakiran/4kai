@@ -519,7 +519,13 @@ function ForecastActualTimeSeries({
         Filtered: {startDate} to {endDate} | Data available: {allMinDate} to {allMaxDate}
       </Typography>
 
-      <Box sx={{ height: 300 }}>
+      <Box sx={{ height : 300,
+        "& .nivo-legend text": {
+          fontSize: 22,
+          fontWeight: 700,
+          letterSpacing: "0.2px"
+        }
+      }}>
         <ResponsiveLine
           data={chartData}
           tooltip={({ point }) => {
@@ -572,12 +578,26 @@ function ForecastActualTimeSeries({
           curve="monotoneX"
           legends={[
             {
-              anchor: 'top-left',
+              anchor: 'top-right',          // Move legend to top-right for clarity
               direction: 'row',
-              translateY: -20,
-              itemsSpacing: 10,
+              justify: false,
+              translateY: -25,              // Move up above the chart
+              itemsSpacing: 18,
               itemDirection: 'left-to-right',
-              symbolSize: 12,
+              itemWidth: 100,               // Each legend item width
+              itemHeight: 22,               // Legend height
+              symbolSize: 22,               // Larger swatch for better visibility
+              symbolShape: "circle",
+              itemTextColor: "#1e293b",     // Dark blue-gray, strong contrast
+              effects: [
+                {
+                  on: 'hover',
+                  style: {
+                    itemTextColor: '#1e40af',   // Highlight text on hover
+                    itemBackground: '#e0e7ef',
+                  }
+                }
+              ]
             }
           ]}
         />
@@ -1223,6 +1243,17 @@ function Dashboard1() {
           </Box>
           {/* Dashboard Charts in Grid */}
           <Grid container spacing={3} sx={{ mb: 3 }}>
+            
+            <Grid item xs={12} md={6}>
+              <ChartCard title="Product Sales vs Forecast" onExpand={() => setExpandedChart('prodforecast')}>
+                <ProductSalesBreakdown data={productSalesBreakdown} filters={filters} />
+              </ChartCard>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard title="Forecast Accuracy Analysis" onExpand={() => setExpandedChart('FAAnalysis')}>
+                <ForecastAccuracyWaterfall />
+              </ChartCard>
+            </Grid>
             <Grid item xs={12} md={6}>
               <ChartCard title="Feature Correlation Heatmap" onExpand={() => setExpandedChart('correlation')}>
                 <CorrelationHeatmap />
@@ -1240,16 +1271,6 @@ function Dashboard1() {
             <Grid item xs={12} md={6}>
               <ChartCard title="Demand Volatility Index" onExpand={() => setExpandedChart('DVIndex')}>
                 <DemandVolatilityGauge />
-              </ChartCard>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <ChartCard title="Product Sales vs Forecast" onExpand={() => setExpandedChart('prodforecast')}>
-                <ProductSalesBreakdown data={productSalesBreakdown} filters={filters} />
-              </ChartCard>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <ChartCard title="Forecast Accuracy Analysis" onExpand={() => setExpandedChart('FAAnalysis')}>
-                <ForecastAccuracyWaterfall />
               </ChartCard>
             </Grid>
           </Grid>
