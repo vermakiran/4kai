@@ -16,7 +16,7 @@ from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error, 
 from sklearn.model_selection import train_test_split
 from statsmodels.tsa.seasonal import seasonal_decompose
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel, ExpSineSquared
-from app.models import LoginRequest, ForecastInput, UploadCleanedData, DeleteFileRequest, UserCreate, UserOut 
+from app.models import LoginRequest, ForecastInput, UploadCleanedData, DeleteFileRequest, UserCreate, UserOut, ActualsUpdate, SaveActualsRequest
 from fastapi.responses import FileResponse
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from sklearn.gaussian_process import GaussianProcessRegressor
@@ -3153,6 +3153,75 @@ async def get_dashboard_data(
                 }
                 for row in cur.fetchall()
             ]
+            
+        # 4. Fetch and Process Data for Accuracy Charts
+        accuracy_where_clauses = ["p.FORECASTID = ?"]
+        accuracy_params = [latest_forecastid]
+
+        if product and product not in ["All", "All Products"]:
+            accuracy_where_clauses.append("p.PRODUCTID = ?")
+            accuracy_params.append(product)
+        if store and store not in ["All", "All Stores"]:
+            accuracy_where_clauses.append("p.STOREID = ?")
+            accuracy_params.append(store)
+        if start:
+            accuracy_where_clauses.append("p.FORECASTDATE >= ?")
+            accuracy_params.append(str(start))
+        if end:
+            accuracy_where_clauses.append("p.FORECASTDATE <= ?")
+            accuracy_params.append(str(end))
+
+        accuracy_where_str = " AND ".join(accuracy_where_clauses)
+
+        accuracy_query = f"""
+        WITH Predictions AS (
+            SELECT FORECASTDATE, PRODUCTID, STOREID, PREDICTEDDEMAND
+            FROM FORECASTDATA p
+            WHERE {accuracy_where_str}
+        )
+        SELECT
+            p.PRODUCTID as product, p.STOREID as store,
+            p.FORECASTDATE as "date", p.PREDICTEDDEMAND as forecast,
+            a.ACTUAL_UNITS as actual
+        FROM Predictions p
+        JOIN ACTUALS_DATA a ON p.PRODUCTID = a.PRODUCTID AND p.STOREID = a.STOREID AND p.FORECASTDATE = a.SALESDATE
+        """
+
+        cur.execute(accuracy_query, accuracy_params)
+        columns = [desc[0].lower() for desc in cur.description]
+        accuracy_data = [dict(zip(columns, row)) for row in cur.fetchall()]
+
+        # Process this new data for our two charts
+        forecast_variance = {}
+        drilldown_data = {}
+
+        for row in accuracy_data:
+            prod, stor, actual_val, forecast_val, date_str = row['product'], row['store'] or 'N/A', float(row['actual']), float(row['forecast']), str(row['date'])
+            
+            # Aggregate for Waterfall Chart
+            forecast_variance.setdefault(prod, {'variance': 0})['variance'] += actual_val - forecast_val
+
+            # Aggregate for Drilldown Chart
+            drilldown_data.setdefault(stor, {'Overforecast': 0, 'Underforecast': 0, 'Accurate': 0, 'products': {}})
+            drilldown_data[stor].setdefault('products', {}).setdefault(prod, {'Overforecast': 0, 'Underforecast': 0, 'Accurate': 0, 'timeseries': {}})
+            drilldown_data[stor]['products'][prod].setdefault('timeseries', {}).setdefault(date_str, {'Overforecast': 0, 'Underforecast': 0, 'Accurate': 0})
+            
+            error_percent = ((forecast_val - actual_val) / actual_val) if actual_val != 0 else (1 if forecast_val > 0 else 0)
+            status = 'Accurate' if abs(error_percent) <= 0.10 else ('Overforecast' if error_percent > 0 else 'Underforecast')
+            
+            drilldown_data[stor][status] += 1
+            drilldown_data[stor]['products'][prod][status] += 1
+            drilldown_data[stor]['products'][prod]['timeseries'][date_str][status] += 1
+
+        # Final formatting for the two new charts
+        final_forecast_variance = [{'label': k, 'value': v['variance']} for k, v in forecast_variance.items()]
+        drilldown_region = [{'region': k, 'Overforecast': v['Overforecast'], 'Underforecast': v['Underforecast'], 'Accurate': v['Accurate']} for k, v in drilldown_data.items()]
+        drilldown_product = {k: [{'product': p_k, 'Overforecast': p_v['Overforecast'], 'Underforecast': p_v['Underforecast'], 'Accurate': p_v['Accurate']} for p_k, p_v in v['products'].items()] for k, v in drilldown_data.items()}
+        drilldown_timeseries = {k: {p_k: [{'date': d_k, **d_v} for d_k, d_v in p_v['timeseries'].items()] for p_k, p_v in v['products'].items()} for k, v in drilldown_data.items()}
+
+        final_drilldown_data = {
+            "regionData": drilldown_region, "productData": drilldown_product, "timeSeriesData": drilldown_timeseries
+        }
         return {
             "filters": {
                 "productList": product_list,
@@ -3163,7 +3232,9 @@ async def get_dashboard_data(
             },
             "kpiData": kpiData,
             "timeseries": timeseries,
-            "productSalesBreakdown": product_sales_breakdown
+            "productSalesBreakdown": product_sales_breakdown,
+            "forecastVariance": final_forecast_variance,
+            "drilldownErrorData": final_drilldown_data
         }
 
 
@@ -3921,3 +3992,102 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {e}")
     finally:
         cur.close()
+
+
+@router.get("/review-latest-forecast")
+async def get_latest_forecast_for_review(
+    conn=Depends(get_hana_connection),
+    current_user: str = Depends(get_current_user)
+):
+    """
+    Fetches the latest forecast run and joins it with any existing actuals.
+    """
+    with conn.cursor() as cur:
+        # Step 1: Find the most recent FORECASTID
+        cur.execute("SELECT MAX(FORECASTID) FROM FORECASTDATA")
+        row = cur.fetchone()
+        latest_forecast_id = row[0] if row and row[0] is not None else -1 # Use -1 if no forecasts exist
+
+        if latest_forecast_id == -1:
+            return {"status": "success", "data": [], "forecast_id": None}
+
+        # Step 2: Run the main query using this latest ID
+        sql_query = """
+        WITH Predictions AS (
+            SELECT FORECASTDATE, PRODUCTID, STOREID, PREDICTEDDEMAND
+            FROM FORECASTDATA
+            WHERE FORECASTID = ? AND PREDICTEDDEMAND IS NOT NULL
+        ),
+        Actuals AS (
+            SELECT SALESDATE, PRODUCTID, STOREID, ACTUAL_UNITS
+            FROM ACTUALS_DATA
+        )
+        SELECT
+            COALESCE(p.FORECASTDATE, a.SALESDATE) AS "date",
+            COALESCE(p.PRODUCTID, a.PRODUCTID) AS "product",
+            COALESCE(p.STOREID, a.STOREID) AS "store",
+            p.PREDICTEDDEMAND AS "forecast_quantity",
+            a.ACTUAL_UNITS AS "actual_quantity"
+        FROM Predictions p
+        FULL OUTER JOIN Actuals a
+            ON p.PRODUCTID = a.PRODUCTID
+            AND p.STOREID = a.STOREID
+            AND p.FORECASTDATE = a.SALESDATE
+        WHERE p.PRODUCTID IS NOT NULL OR a.PRODUCTID IS NOT NULL
+        ORDER BY "product", "store", "date";
+        """
+        cur.execute(sql_query, (latest_forecast_id,))
+        rows = cur.fetchall()
+        columns = [desc[0].lower() for desc in cur.description]
+        data = [dict(zip(columns, row)) for row in rows]
+
+        # Convert database types for JSON
+        for row in data:
+            row['date'] = str(row['date']) if row.get('date') else None
+            row['forecast_quantity'] = float(row['forecast_quantity']) if row.get('forecast_quantity') is not None else None
+            row['actual_quantity'] = float(row['actual_quantity']) if row.get('actual_quantity') is not None else None
+
+    # Also return the ID of the forecast that was loaded
+    return {"status": "success", "data": data, "forecast_id": latest_forecast_id}
+
+
+# --- Save the planner's entered actuals ---
+@router.post("/save-actuals")
+async def save_actuals_data(
+    payload: SaveActualsRequest,
+    conn = Depends(get_hana_connection),
+    current_user: str = Depends(get_current_user)
+):
+    """Receives a list of actuals data and upserts it into the ACTUALS_DATA table."""
+    records_to_upsert = []
+    for update in payload.updates:
+        records_to_upsert.append((
+            update.product,
+            update.store,
+            update.date,
+            update.actual_units,
+            current_user
+        ))
+
+    if not records_to_upsert:
+        return {"status": "success", "message": "No updates to save."}
+
+    with conn.cursor() as cur:
+        # MERGE is the safest way to either INSERT a new actual or UPDATE an existing one.
+        # This is a robust pattern for HANA.
+        cur.executemany(
+            """
+            MERGE INTO ACTUALS_DATA AS target
+            USING (SELECT ? AS PRODUCTID, ? AS STOREID, ? AS SALESDATE, ? AS ACTUAL_UNITS, ? AS USER FROM DUMMY) AS source
+            ON target.PRODUCTID = source.PRODUCTID AND target.STOREID = source.STOREID AND target.SALESDATE = source.SALESDATE
+            WHEN MATCHED THEN
+                UPDATE SET target.ACTUAL_UNITS = source.ACTUAL_UNITS, target.ENTERED_BY = source.USER, target.ENTRY_TIMESTAMP = CURRENT_UTCTIMESTAMP
+            WHEN NOT MATCHED THEN
+                INSERT (PRODUCTID, STOREID, SALESDATE, ACTUAL_UNITS, ENTERED_BY)
+                VALUES (source.PRODUCTID, source.STOREID, source.SALESDATE, source.ACTUAL_UNITS, source.USER);
+            """,
+            records_to_upsert
+        )
+        conn.commit()
+
+    return {"status": "success", "message": f"Successfully saved {len(records_to_upsert)} actuals records."}

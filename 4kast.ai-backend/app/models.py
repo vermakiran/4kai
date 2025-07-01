@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, constr
+from datetime import date
 from typing import List, Optional, Dict, Annotated
 
 class LoginRequest(BaseModel):
@@ -36,3 +37,13 @@ class UserOut(BaseModel):
     employee_id: Optional[str] = None
     org_id: int
     isactive: bool
+    
+
+class ActualsUpdate(BaseModel):
+    product: str
+    store: str
+    date: date
+    actual_units: Optional[float] = None
+
+class SaveActualsRequest(BaseModel):
+    updates: List[ActualsUpdate]

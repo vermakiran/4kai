@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { PLANNERWB_ENDPOINT } from "./config"; 
 import Cookies from "js-cookie";
 import PageTitle from './PageTitle';
+import ActualsEntryWorksheet from './ActualsEntryWorksheet';
 
 function aggregateTableData(tableData, timeBucket) {
   if (!tableData) return [];
@@ -60,6 +61,10 @@ const PlannerWorkbench = () => {
   const [saveComment, setSaveComment] = useState("");
   const [overrideInfo, setOverrideInfo] = useState({});
   const token = Cookies.get("authToken");
+
+  const [reviewData, setReviewData] = useState(null);
+  const [loadedForecastId, setLoadedForecastId] = useState(null);
+  const [isLoadingReview, setIsLoadingReview] = useState(true);
 
 
   useEffect(() => {
@@ -133,6 +138,32 @@ useEffect(() => {
       console.error(err);
     });
 }, []);
+
+    // --- NEW useEffect hook to automatically load the latest forecast data for review ---
+useEffect(() => {
+  const loadLatestForecast = async () => {
+    if (!token) return; 
+    setIsLoadingReview(true);
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/api/engine/review-latest-forecast`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || "Failed to fetch latest forecast for review.");
+      }
+      const result = await response.json();
+      setReviewData(result.data);
+      setLoadedForecastId(result.forecast_id);
+    } catch (error) {
+        console.error(error);
+    } finally {
+        setIsLoadingReview(false);
+      }
+    };
+    
+    loadLatestForecast();
+  }, [token]);
 
 const filteredTableDataRaw = tableData
   ? tableData.filter(row =>
@@ -227,6 +258,38 @@ const allDates = filteredTableData
     alert(error.message);
   }
 };
+
+  const handleSaveActuals = async (updates) => {
+    if (!updates || updates.length === 0) {
+        alert("No changes to save.");
+        return;
+    }
+    const payload = { updates: updates };
+    try {
+        const response = await fetch(`http://127.0.0.1:5000/api/engine/save-actuals`, {
+            method: 'POST',
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || "Failed to save actuals data.");
+        }
+        alert("Actuals saved successfully! Dashboard data will be updated on next refresh.");
+        const freshResponse = await fetch(`http://127.0.0.1:5000/api/engine/review-latest-forecast`, {
+            headers: { "Authorization": `Bearer ${token}` }
+        });
+        const freshResult = await freshResponse.json();
+        setReviewData(freshResult.data);
+    } catch (error) {
+        console.error("Save Actuals Error:", error);
+        alert(`Error: ${error.message}`);
+        throw error;
+    }
+  };
 
   const handleRefresh = () => {
     setTableData(null); // Optional: Show loading UI
@@ -493,6 +556,32 @@ const allDates = filteredTableData
 
           {/* Worksheet */}
           {renderWorksheet()}
+
+          <div className="card" style={{ marginTop: '40px', borderTop: '3px solid #007bff' }}>
+              <h3 className="card-header">Forecast vs. Actuals Entry</h3>
+              <div className="card-body">
+                  {isLoadingReview ? (
+                      <p>Loading Latest Forecast for Review...</p>
+                  ) : reviewData && reviewData.length > 0 ? (
+                      <>
+                          <p style={{marginBottom: '1rem', padding: '10px', backgroundColor: '#e9ecef', borderRadius: '5px'}}>
+                              Reviewing latest forecast run: <strong>ID {loadedForecastId}</strong>. 
+                              Enter the actual sales figures below and click "Save Actuals".
+                          </p>
+                          
+                          {/* --- THE FIX IS HERE --- */}
+                          <div style={{ width: '100%', overflowX: 'auto' }}>
+                              <ActualsEntryWorksheet 
+                                  forecastData={reviewData} 
+                                  onSave={handleSaveActuals}
+                              />
+                          </div>
+                      </>
+                  ) : (
+                      <p>No forecast data is currently available to review.</p>
+                  )}
+              </div>
+          </div>
         </div>
 
         {/* Add the save dialog */}

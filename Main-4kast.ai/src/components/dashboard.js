@@ -770,16 +770,13 @@ function ProductSalesBreakdown({ showTitle = true, data =[], filters } ={}) {
   );
 }
 
-function ForecastAccuracyWaterfall({ showTitle = true } ={}) {
+function ForecastAccuracyWaterfall({ data = [], showTitle = true } ={}) {
   const rawData = [
     { label: 'Total Forecast', value: 0 },
-    { label: 'Product A', value: 120 },
-    { label: 'Product B', value: -45 },
-    { label: 'Product C', value: 78 },
-    { label: 'Product D', value: -32 },
-    { label: 'Product E', value: 54 },
-    { label: 'Total Actual', isTotal: true }
+     ...data.map(d => ({ label: d.label, value: d.value })),
   ];
+
+   rawData.push({ label: 'Net Variance', isTotal: true });
 
   let cumulative = 0;
   const chartData = rawData.map((d, i) => {
@@ -968,10 +965,13 @@ function Dashboard1() {
   const [minDate, setMinDate] = useState('');
   const [maxDate, setMaxDate] = useState('');
 
+
   // The FULL dataset, never overwritten!
   const [fullTimeSeriesData, setFullTimeSeriesData] = useState([]);
   const [timeSeriesData, setTimeSeriesData] = useState([]);
   const [productSalesBreakdown, setProductSalesBreakdown] = useState([]);
+  const [forecastVariance, setForecastVariance] = useState([]);
+  const [drilldownData, setDrilldownData] = useState({ regionData: [], productData: {}, timeSeriesData: {} });
 
 
   // Only these filters can trigger date resets:
@@ -1012,6 +1012,9 @@ function Dashboard1() {
           forecastBias: res.kpiData.forecast_bias,
           weightedMape: res.kpiData.weighted_mape,
         });
+
+        setForecastVariance(res.forecastVariance || []);
+        setDrilldownData(res.drilldownErrorData || { regionData: [], productData: {}, timeSeriesData: {} });
 
         // Only set start/end ONCE here, based on data, to avoid double fetches!
         if ((res.timeseries || []).length) {
@@ -1247,7 +1250,7 @@ function Dashboard1() {
             </Grid>
             <Grid item xs={12} md={6}>
               <ChartCard title="Forecast Accuracy Analysis" onExpand={() => setExpandedChart('FAAnalysis')}>
-                <ForecastAccuracyWaterfall />
+                <ForecastAccuracyWaterfall data={forecastVariance} />
               </ChartCard>
             </Grid>
             <Grid item xs={12} md={6}>
@@ -1258,9 +1261,9 @@ function Dashboard1() {
             <Grid item xs={12} md={6}>
               <ChartCard title="Forecast Error Drilldown" onExpand={() => setExpandedChart('drilldown')}>
                 <DrillDownErrorChart
-                  regionData={drillDownRegionData}
-                  productData={drillDownProductData}
-                  timeSeriesData={drillDownTimeSeriesData}
+                  regionData={drilldownData.regionData}
+                  productData={drilldownData.productData}
+                  timeSeriesData={drilldownData.timeSeriesData}
                 />
               </ChartCard>
             </Grid>
