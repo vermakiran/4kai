@@ -704,14 +704,12 @@ function DemandVolatilityGauge({ showTitle = true } ={}) {
 
 function ProductSalesBreakdown({ showTitle = true, data =[], filters } ={}) {
   if (
-    !filters ||
-    filters.region === "All Stores" ||
-    filters.productFamily === "All Products"
+    !filters || !filters.region || filters.region === "All Stores"
   ) {
     return (
       <Box sx={{ p: 3, textAlign: 'center', color: "#888" }}>
         <Typography variant="h6">
-          Please select a specific Store and Product to see the breakdown.
+          Please select a specific Store to see the breakdown.
         </Typography>
       </Box>
     );
@@ -989,21 +987,41 @@ function Dashboard1() {
       setLoading(true);
       try {
         const token = Cookies.get("authToken");
-        const response = await fetch(DASHBOARD_ENDPOINT, {
+        const initialResponse = await fetch(DASHBOARD_ENDPOINT, {
           headers: {
             "Authorization": `Bearer ${token}`,
             "Content-Type": "application/json",
           },
         });
-        if (!response.ok) throw new Error("Failed to load data");
-        const res = await response.json();
+        if (!initialResponse.ok) throw new Error("Failed to initial filter data");
+        const initialData = await initialResponse.json();
 
-        setProductFamilies(['All Products', ...(res.filters.productList || [])]);
-        setRegions(['All Stores', ...(res.filters.storeList || [])]);
-        setModels(res.filters.modelList || []);
+        const storeList = initialData.filters.storeList || [];
+        const productList = initialData.filters.productList || [];
+        const modelList = initialData.filters.modelList || [];
+
+        // 2. Determine the default store to load
+        const defaultStore = storeList.length > 0 ? storeList[0] : 'All Stores';
+
+        
+        setRegions(['All Stores', ...storeList]);
+        setProductFamilies(['All Products', ...productList]);
+        setModels(modelList);
+
+        const params = new URLSearchParams();
+        if (defaultStore !== 'All Stores') {
+          params.append("store", defaultStore);
+        }
+        
+        const dataResponse = await fetch(`${DASHBOARD_ENDPOINT}?${params.toString()}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (!dataResponse.ok) throw new Error("Failed to load dashboard data");
+        const res = await dataResponse.json();
+
         setMinDate(res.filters.minDate || '');
         setMaxDate(res.filters.maxDate || '');
-
+        
         setFullTimeSeriesData(res.timeseries || []);
         setKpiData({
           totalDemand: res.kpiData.total_demand,
@@ -1015,12 +1033,15 @@ function Dashboard1() {
 
         setForecastVariance(res.forecastVariance || []);
         setDrilldownData(res.drilldownErrorData || { regionData: [], productData: {}, timeSeriesData: {} });
+        
+        setProductSalesBreakdown(res.productSalesBreakdown || []);
 
         // Only set start/end ONCE here, based on data, to avoid double fetches!
         if ((res.timeseries || []).length) {
+          const defaultStore = storeList.length > 0 ? storeList[0] : 'All Stores';
           setFilters({
             productFamily: 'All Products',
-            region: 'All Stores',
+            region: defaultStore,
             model: (res.filters.modelList && res.filters.modelList[0]) || '',
             startDate: res.timeseries[0].date,
             endDate: res.timeseries[res.timeseries.length - 1].date,
@@ -1121,44 +1142,46 @@ function Dashboard1() {
 
   // Product-sales breakdown chart
   useEffect(() => {
-  if (
-    filters.region &&
-    filters.region !== "All Stores" &&
-    filters.productFamily &&
-    filters.productFamily !== "All Products"
-  ) {
-    const fetchProductSalesBreakdown = async () => {
-      try {
-        const token = Cookies.get("authToken");
-        const params = new URLSearchParams();
-        params.append("store", filters.region);
-        params.append("product", filters.productFamily);
-        if (filters.startDate) params.append("start", filters.startDate);
-        if (filters.endDate) params.append("end", filters.endDate);
+    // This hook now triggers whenever the user changes the store filter.
+    if (filters.region && filters.region !== "All Stores") {
+      const fetchProductSalesBreakdown = async () => {
+        try {
+          const token = Cookies.get("authToken");
+          const params = new URLSearchParams();
+          params.append("store", filters.region);
+          // We don't add product, so the backend gives us all products for the store
+          if (filters.startDate) params.append("start", filters.startDate);
+          if (filters.endDate) params.append("end", filters.endDate);
 
-        const response = await fetch(
-          `${DASHBOARD_ENDPOINT}?${params.toString()}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-          }
-        );
-        if (!response.ok) throw new Error("Failed to load product sales breakdown");
-        const res = await response.json();
-        setProductSalesBreakdown(res.productSalesBreakdown || []);
-      } catch (err) {
-        setProductSalesBreakdown([]);
+          const response = await fetch(
+            `${DASHBOARD_ENDPOINT}?${params.toString()}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            }
+          );
+          if (!response.ok) throw new Error("Failed to load product sales breakdown");
+          const res = await response.json();
+          setProductSalesBreakdown(res.productSalesBreakdown || []);
+        } catch (err) {
+          console.error("Error fetching breakdown data:", err);
+          setProductSalesBreakdown([]);
+        }
+      };
+      
+      // Only fetch if the dashboard is not in its initial loading state.
+      // The initial data is already set by the fetchInit hook.
+      if(!loading) {
+        fetchProductSalesBreakdown();
       }
-    };
-    fetchProductSalesBreakdown();
-  } else {
-    // If filters are not valid, clear the chart
-    setProductSalesBreakdown([]);
-  }
-}, [filters.region, filters.productFamily, filters.startDate, filters.endDate]);
-
+    } else {
+      // If user selects "All Stores", clear the chart.
+      setProductSalesBreakdown([]);
+    }
+  // This now only depends on the store filter, dates, and loading state.
+  }, [filters.region, filters.startDate, filters.endDate, loading]);
 
   // --- Date Range quick-select handler ---
   const handleRangeClick = (range) => {
@@ -1306,9 +1329,9 @@ function Dashboard1() {
             {expandedChart === 'drilldown' && (
               <ChartWrapper>
                 <DrillDownErrorChart
-                  regionData={drillDownRegionData}
-                  productData={drillDownProductData}
-                  timeSeriesData={drillDownTimeSeriesData}
+                  regionData={drilldownData.regionData}
+                  productData={drilldownData.productData}
+                  timeSeriesData={drilldownData.timeSeriesData}
                 />
               </ChartWrapper>
             )}

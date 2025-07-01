@@ -1276,3 +1276,237 @@ async def upload_clean_date(request: UploadCleanedData, current_user: str = Depe
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error saving cleaned data: {str(e)}")
 
+
+
+
+async def get_dashboard_data12(
+    current_user: str = Depends(get_current_user),
+    conn = Depends(get_hana_connection),
+    product: str = Query(None),
+    model: str = Query(None),
+    start: str = Query(None),
+    end: str = Query(None),
+    store: str = Query(None)
+):
+    try:
+        with conn.cursor() as cur:
+            # 1. Latest FORECASTID
+            cur.execute("SELECT MAX(FORECASTID) FROM DBADMIN.FORECASTDATA")
+            latest_forecastid = cur.fetchone()
+            latest_forecastid = latest_forecastid[0] if latest_forecastid and latest_forecastid[0] is not None else 1
+            
+            TOP_N = 3  # or 5 if you want top 5
+            cur.execute(f"""
+                SELECT PRODUCTID
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ?
+                GROUP BY PRODUCTID
+                ORDER BY SUM(HISTORICALDEMAND) DESC
+                LIMIT {TOP_N}
+            """, (latest_forecastid,))
+            top_products = [row[0] for row in cur.fetchall()]
+            
+            cur.execute(f"""
+                SELECT STOREID
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ?
+                GROUP BY STOREID
+                ORDER BY SUM(HISTORICALDEMAND) DESC
+                LIMIT {TOP_N}
+            """, (latest_forecastid,))
+            top_stores = [row[0] for row in cur.fetchall()]
+
+            # 2. Product/Store Dropdowns and Product Count (latest run only)
+            cur.execute("SELECT COUNT(DISTINCT PRODUCTID) FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
+            num_products = int(cur.fetchone()[0] or 0)
+
+            cur.execute("SELECT DISTINCT PRODUCTID FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
+            product_list = [row[0] for row in cur.fetchall()] or []
+
+            cur.execute("SELECT DISTINCT STOREID FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
+            store_list = [row[0] for row in cur.fetchall()] or []
+
+            cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
+            model_list = [row[0] for row in cur.fetchall()] or []
+
+            # 3. Min/max forecast date in this run (for filter widgets)
+            cur.execute("""
+                SELECT MIN(FORECASTDATE), MAX(FORECASTDATE)
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ? AND PREDICTEDDEMAND IS NOT NULL
+            """, (latest_forecastid,))
+            row = cur.fetchone()
+            min_date = str(row[0]) if row and row[0] is not None else ""
+            max_date = str(row[1]) if row and row[1] is not None else ""
+
+            # 4. KPIs: Only rows in this run where PREDICTEDDEMAND is not null
+            cur.execute("""
+                SELECT 
+                    COALESCE(SUM(PREDICTEDDEMAND), 0),
+                    AVG(MAPE), AVG(RMSE), AVG(BIAS), AVG(MAE),
+                    COALESCE(SUM(MAPE * PREDICTEDDEMAND) / NULLIF(SUM(PREDICTEDDEMAND), 0), 0)
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ?
+                  AND PREDICTEDDEMAND IS NOT NULL
+                  AND MAPE IS NOT NULL
+                  AND RMSE IS NOT NULL
+                  AND BIAS IS NOT NULL
+                  AND MAE IS NOT NULL
+            """, (latest_forecastid,))
+            row = cur.fetchone() or [0, 0, 0, 0, 0, 0]
+            total_demand = float(row[0]) if row[0] is not None else 0.0
+            mape = float(row[1]) if row[1] is not None else 0.0
+            rmse = float(row[2]) if row[2] is not None else 0.0
+            bias = float(row[3]) if row[3] is not None else 0.0
+            mae = float(row[4]) if row[4] is not None else 0.0
+            weighted_mape = float(row[5]) if row[5] is not None else 0.0
+            fva = 100 - mape if mape else 0.0
+
+            # 5. Chart logic: Use user filters (product, store, start, end)
+            where_clauses = ["FORECASTID = ?"]
+            params = [latest_forecastid]
+            if product:
+                where_clauses.append("PRODUCTID = ?")
+                params.append(product)
+            if store:
+                where_clauses.append("STOREID = ?")
+                params.append(store)
+            if start:
+                where_clauses.append("FORECASTDATE >= ?")
+                params.append(start)
+            if end:
+                where_clauses.append("FORECASTDATE <= ?")
+                params.append(end)
+            where_str = " AND ".join(where_clauses)
+
+            # Line Chart
+            cur.execute(f"""
+                SELECT FORECASTDATE,
+                    MAX(HISTORICALDEMAND) AS actual,
+                    MAX(PREDICTEDDEMAND) AS forecast
+                FROM DBADMIN.FORECASTDATA
+                WHERE {where_str}
+                GROUP BY FORECASTDATE
+                ORDER BY FORECASTDATE
+            """, params)
+
+            lineData = [
+                {
+                    "name": str(r[0]),
+                    "value": float(r[1]) if r[1] is not None else None,      # Historical/actual
+                    "forecast": float(r[2]) if r[2] is not None else None    # Forecasted
+                }
+                for r in cur.fetchall()
+            ]
+
+            # Bar chart: total sales per product, using only historical rows (HISTORICALDEMAND is not null)
+            cur.execute("""
+                SELECT PRODUCTID, SUM(HISTORICALDEMAND) as sales
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ?
+                AND HISTORICALDEMAND IS NOT NULL
+                GROUP BY PRODUCTID
+                ORDER BY PRODUCTID
+            """, (latest_forecastid,))
+
+            barData = [
+                {"name": r[0], "sales": float(r[1] or 0)}
+                for r in cur.fetchall()
+            ]
+            
+            #Waterfall Chart
+            cur.execute("""
+                SELECT PRODUCTID, AVG(MAPE) AS impact
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ?
+                AND MAPE IS NOT NULL
+                GROUP BY PRODUCTID
+                ORDER BY impact DESC
+            """, (latest_forecastid,))
+            
+            waterfallData = [{"name": r[0], "impact": float(r[1] or 0)} for r in cur.fetchall()]
+
+
+            # Pie Chart
+            cur.execute("""
+                SELECT
+                    SUM(CASE WHEN MAPE < 14.2 THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN MAPE >= 14.2 AND MAPE < 15.5 THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN MAPE >= 15.5 THEN 1 ELSE 0 END),
+                    COUNT(*)
+                FROM DBADMIN.FORECASTDATA
+                WHERE FORECASTID = ? AND MAPE IS NOT NULL
+            """, (latest_forecastid,))
+            counts_all = cur.fetchone() or [0, 0, 0, 1]  # avoid div by zero
+
+            total = counts_all[3] if counts_all[3] > 0 else 1
+            pieData_all = [
+                {"name": "High Accuracy (<15%)", "value": round(100 * (counts_all[0] or 0) / total, 2)},
+                {"name": "Medium Accuracy (15-30%)", "value": round(100 * (counts_all[1] or 0) / total, 2)},
+                {"name": "Low Accuracy (>=30%)", "value": round(100 * (counts_all[2] or 0) / total, 2)},
+            ]
+
+
+            # Heatmap
+            if top_products and top_stores:
+                prod_placeholders = ",".join("?" for _ in top_products)
+                store_placeholders = ",".join("?" for _ in top_stores)
+                params = [latest_forecastid] + top_products + top_stores
+
+                cur.execute(f"""
+                    SELECT PRODUCTID, STOREID, AVG(MAPE)
+                    FROM DBADMIN.FORECASTDATA
+                    WHERE FORECASTID = ?
+                    AND PRODUCTID IN ({prod_placeholders})
+                    AND STOREID IN ({store_placeholders})
+                    AND MAPE IS NOT NULL
+                    GROUP BY PRODUCTID, STOREID
+                """, params)
+                heatmap_raw_top = cur.fetchall() or []
+                heatmapData_top = [
+                    {"product": r[0], "store": r[1], "avg_mape": float(r[2] or 0)}
+                    for r in heatmap_raw_top
+                ]
+            else:
+                heatmapData_top = []
+
+            chartData = {
+                "lineData": lineData,
+                "barData": barData,
+                "pieData_all": pieData_all,
+                "waterfallData": waterfallData,
+                "topProducts": top_products,
+                "topStores": top_stores,
+                "heatmapData_top": heatmapData_top,
+            }
+            # --- Return ---
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "success",
+                    "data": {
+                        "kpiData": {
+                            "total_demand": total_demand,
+                            "mape": mape,
+                            "rmse": rmse,
+                            "bias": bias,
+                            "mae": mae,
+                            "fva": fva,
+                            "num_products": num_products,
+                            "weighted_mape": weighted_mape,
+                            "latest_forecastid": int(latest_forecastid),
+                            "chartData": chartData,
+                        },
+                        "productList": product_list,
+                        "modelList": model_list,
+                        "storeList": store_list,
+                        "minDate": min_date,
+                        "maxDate": max_date
+                    }
+                }
+            )
+
+    except Exception as e:
+        print("DASHBOARD DATA FETCH ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=f"Dashboard data fetch failed: {str(e)}")
+    

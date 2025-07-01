@@ -53,6 +53,7 @@ from .config import OrganizationCalendarConfig
 import pprint
 from typing import Optional
 import traceback
+from decimal import Decimal
 from passlib.hash import bcrypt 
 
 router = APIRouter(prefix="/api/engine", tags=["engine"])
@@ -3126,9 +3127,9 @@ async def get_dashboard_data(
         ]
         
         product_sales_breakdown =[]
-        if (store and store != "All Stores") and (product and product!= "All Products"):
-            where_clauses = ["RUNID = ?", "STOREID = ?", "PRODUCTID = ?"]
-            params = [latest_forecastid, store, product]
+        if store and store not in ["All", "All Stores"]:
+            where_clauses = ["FORECASTID = ?", "STOREID = ?"]
+            params = [latest_forecastid, store]
             if start:
                 where_clauses.append("FORECASTDATE >= ?")
                 params.append(str(start))
@@ -3237,239 +3238,6 @@ async def get_dashboard_data(
             "drilldownErrorData": final_drilldown_data
         }
 
-
-
-async def get_dashboard_data12(
-    current_user: str = Depends(get_current_user),
-    conn = Depends(get_hana_connection),
-    product: str = Query(None),
-    model: str = Query(None),
-    start: str = Query(None),
-    end: str = Query(None),
-    store: str = Query(None)
-):
-    try:
-        with conn.cursor() as cur:
-            # 1. Latest FORECASTID
-            cur.execute("SELECT MAX(FORECASTID) FROM DBADMIN.FORECASTDATA")
-            latest_forecastid = cur.fetchone()
-            latest_forecastid = latest_forecastid[0] if latest_forecastid and latest_forecastid[0] is not None else 1
-            
-            TOP_N = 3  # or 5 if you want top 5
-            cur.execute(f"""
-                SELECT PRODUCTID
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ?
-                GROUP BY PRODUCTID
-                ORDER BY SUM(HISTORICALDEMAND) DESC
-                LIMIT {TOP_N}
-            """, (latest_forecastid,))
-            top_products = [row[0] for row in cur.fetchall()]
-            
-            cur.execute(f"""
-                SELECT STOREID
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ?
-                GROUP BY STOREID
-                ORDER BY SUM(HISTORICALDEMAND) DESC
-                LIMIT {TOP_N}
-            """, (latest_forecastid,))
-            top_stores = [row[0] for row in cur.fetchall()]
-
-            # 2. Product/Store Dropdowns and Product Count (latest run only)
-            cur.execute("SELECT COUNT(DISTINCT PRODUCTID) FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
-            num_products = int(cur.fetchone()[0] or 0)
-
-            cur.execute("SELECT DISTINCT PRODUCTID FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
-            product_list = [row[0] for row in cur.fetchall()] or []
-
-            cur.execute("SELECT DISTINCT STOREID FROM DBADMIN.FORECASTDATA WHERE FORECASTID = ?", (latest_forecastid,))
-            store_list = [row[0] for row in cur.fetchall()] or []
-
-            cur.execute("SELECT MODELNAME FROM DBADMIN.MODELS")
-            model_list = [row[0] for row in cur.fetchall()] or []
-
-            # 3. Min/max forecast date in this run (for filter widgets)
-            cur.execute("""
-                SELECT MIN(FORECASTDATE), MAX(FORECASTDATE)
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ? AND PREDICTEDDEMAND IS NOT NULL
-            """, (latest_forecastid,))
-            row = cur.fetchone()
-            min_date = str(row[0]) if row and row[0] is not None else ""
-            max_date = str(row[1]) if row and row[1] is not None else ""
-
-            # 4. KPIs: Only rows in this run where PREDICTEDDEMAND is not null
-            cur.execute("""
-                SELECT 
-                    COALESCE(SUM(PREDICTEDDEMAND), 0),
-                    AVG(MAPE), AVG(RMSE), AVG(BIAS), AVG(MAE),
-                    COALESCE(SUM(MAPE * PREDICTEDDEMAND) / NULLIF(SUM(PREDICTEDDEMAND), 0), 0)
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ?
-                  AND PREDICTEDDEMAND IS NOT NULL
-                  AND MAPE IS NOT NULL
-                  AND RMSE IS NOT NULL
-                  AND BIAS IS NOT NULL
-                  AND MAE IS NOT NULL
-            """, (latest_forecastid,))
-            row = cur.fetchone() or [0, 0, 0, 0, 0, 0]
-            total_demand = float(row[0]) if row[0] is not None else 0.0
-            mape = float(row[1]) if row[1] is not None else 0.0
-            rmse = float(row[2]) if row[2] is not None else 0.0
-            bias = float(row[3]) if row[3] is not None else 0.0
-            mae = float(row[4]) if row[4] is not None else 0.0
-            weighted_mape = float(row[5]) if row[5] is not None else 0.0
-            fva = 100 - mape if mape else 0.0
-
-            # 5. Chart logic: Use user filters (product, store, start, end)
-            where_clauses = ["FORECASTID = ?"]
-            params = [latest_forecastid]
-            if product:
-                where_clauses.append("PRODUCTID = ?")
-                params.append(product)
-            if store:
-                where_clauses.append("STOREID = ?")
-                params.append(store)
-            if start:
-                where_clauses.append("FORECASTDATE >= ?")
-                params.append(start)
-            if end:
-                where_clauses.append("FORECASTDATE <= ?")
-                params.append(end)
-            where_str = " AND ".join(where_clauses)
-
-            # Line Chart
-            cur.execute(f"""
-                SELECT FORECASTDATE,
-                    MAX(HISTORICALDEMAND) AS actual,
-                    MAX(PREDICTEDDEMAND) AS forecast
-                FROM DBADMIN.FORECASTDATA
-                WHERE {where_str}
-                GROUP BY FORECASTDATE
-                ORDER BY FORECASTDATE
-            """, params)
-
-            lineData = [
-                {
-                    "name": str(r[0]),
-                    "value": float(r[1]) if r[1] is not None else None,      # Historical/actual
-                    "forecast": float(r[2]) if r[2] is not None else None    # Forecasted
-                }
-                for r in cur.fetchall()
-            ]
-
-            # Bar chart: total sales per product, using only historical rows (HISTORICALDEMAND is not null)
-            cur.execute("""
-                SELECT PRODUCTID, SUM(HISTORICALDEMAND) as sales
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ?
-                AND HISTORICALDEMAND IS NOT NULL
-                GROUP BY PRODUCTID
-                ORDER BY PRODUCTID
-            """, (latest_forecastid,))
-
-            barData = [
-                {"name": r[0], "sales": float(r[1] or 0)}
-                for r in cur.fetchall()
-            ]
-            
-            #Waterfall Chart
-            cur.execute("""
-                SELECT PRODUCTID, AVG(MAPE) AS impact
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ?
-                AND MAPE IS NOT NULL
-                GROUP BY PRODUCTID
-                ORDER BY impact DESC
-            """, (latest_forecastid,))
-            
-            waterfallData = [{"name": r[0], "impact": float(r[1] or 0)} for r in cur.fetchall()]
-
-
-            # Pie Chart
-            cur.execute("""
-                SELECT
-                    SUM(CASE WHEN MAPE < 14.2 THEN 1 ELSE 0 END),
-                    SUM(CASE WHEN MAPE >= 14.2 AND MAPE < 15.5 THEN 1 ELSE 0 END),
-                    SUM(CASE WHEN MAPE >= 15.5 THEN 1 ELSE 0 END),
-                    COUNT(*)
-                FROM DBADMIN.FORECASTDATA
-                WHERE FORECASTID = ? AND MAPE IS NOT NULL
-            """, (latest_forecastid,))
-            counts_all = cur.fetchone() or [0, 0, 0, 1]  # avoid div by zero
-
-            total = counts_all[3] if counts_all[3] > 0 else 1
-            pieData_all = [
-                {"name": "High Accuracy (<15%)", "value": round(100 * (counts_all[0] or 0) / total, 2)},
-                {"name": "Medium Accuracy (15-30%)", "value": round(100 * (counts_all[1] or 0) / total, 2)},
-                {"name": "Low Accuracy (>=30%)", "value": round(100 * (counts_all[2] or 0) / total, 2)},
-            ]
-
-
-            # Heatmap
-            if top_products and top_stores:
-                prod_placeholders = ",".join("?" for _ in top_products)
-                store_placeholders = ",".join("?" for _ in top_stores)
-                params = [latest_forecastid] + top_products + top_stores
-
-                cur.execute(f"""
-                    SELECT PRODUCTID, STOREID, AVG(MAPE)
-                    FROM DBADMIN.FORECASTDATA
-                    WHERE FORECASTID = ?
-                    AND PRODUCTID IN ({prod_placeholders})
-                    AND STOREID IN ({store_placeholders})
-                    AND MAPE IS NOT NULL
-                    GROUP BY PRODUCTID, STOREID
-                """, params)
-                heatmap_raw_top = cur.fetchall() or []
-                heatmapData_top = [
-                    {"product": r[0], "store": r[1], "avg_mape": float(r[2] or 0)}
-                    for r in heatmap_raw_top
-                ]
-            else:
-                heatmapData_top = []
-
-            chartData = {
-                "lineData": lineData,
-                "barData": barData,
-                "pieData_all": pieData_all,
-                "waterfallData": waterfallData,
-                "topProducts": top_products,
-                "topStores": top_stores,
-                "heatmapData_top": heatmapData_top,
-            }
-            # --- Return ---
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "status": "success",
-                    "data": {
-                        "kpiData": {
-                            "total_demand": total_demand,
-                            "mape": mape,
-                            "rmse": rmse,
-                            "bias": bias,
-                            "mae": mae,
-                            "fva": fva,
-                            "num_products": num_products,
-                            "weighted_mape": weighted_mape,
-                            "latest_forecastid": int(latest_forecastid),
-                            "chartData": chartData,
-                        },
-                        "productList": product_list,
-                        "modelList": model_list,
-                        "storeList": store_list,
-                        "minDate": min_date,
-                        "maxDate": max_date
-                    }
-                }
-            )
-
-    except Exception as e:
-        print("DASHBOARD DATA FETCH ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=f"Dashboard data fetch failed: {str(e)}")
-    
 def safe_float(val):
     if val is None:
         return ""
@@ -3480,7 +3248,7 @@ def safe_float(val):
 
 @router.get("/planner-data")
 async def get_planner_data(
-    conn = Depends(get_hana_connection),
+    conn=Depends(get_hana_connection),
     current_user: str = Depends(get_current_user),
     forecastid: int = None,
     product: str = Query(None),
@@ -3490,105 +3258,132 @@ async def get_planner_data(
 ):
     try:
         with conn.cursor() as cur:
-            # Get latest FORECASTID if not specified
+            # Step 1: Find the most recent FORECASTID from FORECASTDATA
             if forecastid is None:
                 cur.execute("SELECT MAX(FORECASTID) FROM DBADMIN.FORECASTDATA")
-                forecastid = cur.fetchone()[0]
-            
-            # Build WHERE clause
-            where = ["FORECASTID = ?"]
+                row = cur.fetchone()
+                forecastid = row[0] if row and row[0] is not None else -1
+
+            if forecastid == -1:
+                return JSONResponse(status_code=200, content={"status": "success", "data": []})
+
+            # Step 2: Build the filter clauses
+            where_clauses = ["f.FORECASTID = ?"]
             params = [forecastid]
-            if product:
-                where.append("PRODUCTID = ?")
-                params.append(product)
-            if store:
-                where.append("STOREID = ?")
-                params.append(store)
-            if start:
-                where.append("FORECASTDATE >= ?")
-                params.append(start)
-            if end:
-                where.append("FORECASTDATE <= ?")
-                params.append(end)
-            where_clause = " AND ".join(where)
-            
-            # Query all required fields
-            cur.execute(f"""
-                SELECT 
-                    STOREID, PRODUCTID, FORECASTDATE,
-                    HISTORICALDEMAND, PREDICTEDDEMAND, MANUALDEMAND
-                FROM DBADMIN.FORECASTDATA
-                WHERE {where_clause}
-                ORDER BY STOREID, PRODUCTID, FORECASTDATE
-                
-            """, params)
+            if product: where_clauses.append("f.PRODUCTID = ?"); params.append(product)
+            if store: where_clauses.append("f.STOREID = ?"); params.append(store)
+            if start: where_clauses.append("f.FORECASTDATE >= ?"); params.append(start)
+            if end: where_clauses.append("f.FORECASTDATE <= ?"); params.append(end)
+            where_str = " AND ".join(where_clauses)
+
+            # Step 3: Run the main query joining the two tables
+            sql_query = f"""
+            SELECT
+                f.STOREID AS "store",
+                f.PRODUCTID AS "product",
+                f.FORECASTDATE AS "date",
+                f.HISTORICALDEMAND AS "actual_quantity",
+                f.PREDICTEDDEMAND AS "forecast_quantity",
+                f.MANUALDEMAND AS "MANUALDEMAND",
+                a.ACTUAL_UNITS AS "planner_entered_actuals",
+                f.MANUALDEMAND AS "final_qty"
+            FROM
+                DBADMIN.FORECASTDATA AS f
+            LEFT JOIN
+                DBADMIN.ACTUALS_DATA AS a ON f.PRODUCTID = a.PRODUCTID AND f.STOREID = a.STOREID AND f.FORECASTDATE = a.SALESDATE
+            WHERE {where_str}
+            ORDER BY f.STOREID, f.PRODUCTID, f.FORECASTDATE
+            """
+            cur.execute(sql_query, params)
             
             rows = cur.fetchall()
-            result = []
-            for row in rows:
-                store, product, date, actual, forecast, manual = row
-                # Demand Planning Final Qty Logic
-                final_qty = manual or 0
-                result.append({
-                    "store": store,
-                    "product": product,
-                    "date": str(date),
-                    "actual_quantity": safe_float(actual),
-                    "forecast_quantity": safe_float(forecast),
-                    "manual_forecast": safe_float(manual),
-                    "final_qty": safe_float(final_qty)
-                })
+            columns = [desc[0].lower() for desc in cur.description]
+            result = [dict(zip(columns, row)) for row in rows]
+            
+            for row in result:
+                for key, value in row.items():
+                    if isinstance(value, Decimal):
+                        # Convert Decimal to float if it's not None
+                        row[key] = float(value) if value is not None else None
+                
+                # Also ensure date is a string and final_qty logic is applied
+                row['date'] = str(row['date']) if row.get('date') else None
+                row['final_qty'] = row.get('manualdemand') if row.get('manualdemand') is not None else row.get('forecast_quantity')
 
             return JSONResponse(status_code=200, content={"status": "success", "data": result})
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error fetching planner data: {str(e)}")
+
 
 @router.post("/planner-data")
 async def update_planner_data(
     request: Request,
-    conn = Depends(get_hana_connection),
+    conn=Depends(get_hana_connection),
     current_user: str = Depends(get_current_user),
 ):
     updates = await request.json()
-    curr = conn.cursor()
+    if not updates:
+        return {"status": "success", "message": "No updates provided."}
 
-    with curr as cur:
+    with conn.cursor() as cur:
         for edit in updates:
-            store = edit["store"]
-            product = edit["product"]
-            date = edit["date"]
-            manual = edit["MANUALDEMAND"]
-            user = edit.get("user", "unknown")
+            store = edit.get("store")
+            product = edit.get("product")
+            date = edit.get("date")
             reason = edit.get("reason", "")
             comment = edit.get("comment", "")
-
-            # 1. Update main forecast table
-            curr.execute(
-                """
-                UPDATE FORECASTDATA
-                SET MANUALDEMAND = ?
-                WHERE STOREID = ? AND PRODUCTID = ? AND FORECASTDATE = ?
-                """,
-                (manual, store, product, date)
-            )
             
-            old_value = None
+            # --- Logic to update MANUALDEMAND in FORECASTDATA ---
+            if 'MANUALDEMAND' in edit and edit['MANUALDEMAND'] is not None:
+                manual_forecast = edit['MANUALDEMAND']
+                cur.execute(
+                    """
+                    UPDATE DBADMIN.FORECASTDATA
+                    SET MANUALDEMAND = ?
+                    WHERE STOREID = ? AND PRODUCTID = ? AND FORECASTDATE = ?
+                      AND FORECASTID = (SELECT MAX(FORECASTID) FROM DBADMIN.FORECASTDATA)
+                    """,
+                    (manual_forecast, store, product, date)
+                )
+                # Log this specific change
+                cur.execute(
+                    """
+                    INSERT INTO WORKBENCH_EDIT (USER, REASON, COMMENT, STOREID, PRODUCTID, FORECASTDATE, NEWVALUE)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (current_user, reason, f"Updated Manual Forecast: {comment}", store, product, date, manual_forecast)
+                )
 
-
-            # 2. Add to audit log
-            curr.execute(
-                """
-                INSERT INTO WORKBENCH_EDIT (USER, REASON, COMMENT, STOREID, PRODUCTID, FORECASTDATE, OLDVALUE, NEWVALUE, TIMESTAMP)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (user, reason, comment, store, product, date, old_value, manual, datetime.utcnow())
-            )
-
+            # --- Logic to UPSERT planner_entered_actuals into ACTUALS_DATA ---
+            if 'planner_entered_actuals' in edit and edit['planner_entered_actuals'] is not None:
+                planner_actuals = edit['planner_entered_actuals']
+                cur.execute(
+                    """
+                    MERGE INTO DBADMIN.ACTUALS_DATA AS target
+                    USING (SELECT ? AS PRODUCTID, ? AS STOREID, ? AS SALESDATE, ? AS ACTUAL_UNITS, ? AS USER FROM DUMMY) AS source
+                    ON target.PRODUCTID = source.PRODUCTID AND target.STOREID = source.STOREID AND target.SALESDATE = source.SALESDATE
+                    WHEN MATCHED THEN
+                        UPDATE SET target.ACTUAL_UNITS = source.ACTUAL_UNITS, target.ENTERED_BY = source.USER, target.ENTRY_TIMESTAMP = CURRENT_UTCTIMESTAMP
+                    WHEN NOT MATCHED THEN
+                        INSERT (PRODUCTID, STOREID, SALESDATE, ACTUAL_UNITS, ENTERED_BY)
+                        VALUES (source.PRODUCTID, source.STOREID, source.SALESDATE, source.ACTUAL_UNITS, source.USER);
+                    """,
+                    (product, store, date, planner_actuals, current_user)
+                )
+                 # Log this specific change
+                cur.execute(
+                    """
+                    INSERT INTO WORKBENCH_EDIT (USER, REASON, COMMENT, STOREID, PRODUCTID, FORECASTDATE, NEWVALUE)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (current_user, reason, f"Updated Planner Actuals: {comment}", store, product, date, planner_actuals)
+                )
 
     conn.commit()
-    curr.close()
-    return {"status": "success", "message": "Planner data updated"}
+    return {"status": "success", "message": "Planner data updated."}
+
 
 def aggregate_data(df, time_bucket, forecast_type='Overall', item_col=None, organization_id='default'):
     """
@@ -3992,102 +3787,3 @@ async def delete_user(
         raise HTTPException(status_code=500, detail=f"Failed to delete user: {e}")
     finally:
         cur.close()
-
-
-@router.get("/review-latest-forecast")
-async def get_latest_forecast_for_review(
-    conn=Depends(get_hana_connection),
-    current_user: str = Depends(get_current_user)
-):
-    """
-    Fetches the latest forecast run and joins it with any existing actuals.
-    """
-    with conn.cursor() as cur:
-        # Step 1: Find the most recent FORECASTID
-        cur.execute("SELECT MAX(FORECASTID) FROM FORECASTDATA")
-        row = cur.fetchone()
-        latest_forecast_id = row[0] if row and row[0] is not None else -1 # Use -1 if no forecasts exist
-
-        if latest_forecast_id == -1:
-            return {"status": "success", "data": [], "forecast_id": None}
-
-        # Step 2: Run the main query using this latest ID
-        sql_query = """
-        WITH Predictions AS (
-            SELECT FORECASTDATE, PRODUCTID, STOREID, PREDICTEDDEMAND
-            FROM FORECASTDATA
-            WHERE FORECASTID = ? AND PREDICTEDDEMAND IS NOT NULL
-        ),
-        Actuals AS (
-            SELECT SALESDATE, PRODUCTID, STOREID, ACTUAL_UNITS
-            FROM ACTUALS_DATA
-        )
-        SELECT
-            COALESCE(p.FORECASTDATE, a.SALESDATE) AS "date",
-            COALESCE(p.PRODUCTID, a.PRODUCTID) AS "product",
-            COALESCE(p.STOREID, a.STOREID) AS "store",
-            p.PREDICTEDDEMAND AS "forecast_quantity",
-            a.ACTUAL_UNITS AS "actual_quantity"
-        FROM Predictions p
-        FULL OUTER JOIN Actuals a
-            ON p.PRODUCTID = a.PRODUCTID
-            AND p.STOREID = a.STOREID
-            AND p.FORECASTDATE = a.SALESDATE
-        WHERE p.PRODUCTID IS NOT NULL OR a.PRODUCTID IS NOT NULL
-        ORDER BY "product", "store", "date";
-        """
-        cur.execute(sql_query, (latest_forecast_id,))
-        rows = cur.fetchall()
-        columns = [desc[0].lower() for desc in cur.description]
-        data = [dict(zip(columns, row)) for row in rows]
-
-        # Convert database types for JSON
-        for row in data:
-            row['date'] = str(row['date']) if row.get('date') else None
-            row['forecast_quantity'] = float(row['forecast_quantity']) if row.get('forecast_quantity') is not None else None
-            row['actual_quantity'] = float(row['actual_quantity']) if row.get('actual_quantity') is not None else None
-
-    # Also return the ID of the forecast that was loaded
-    return {"status": "success", "data": data, "forecast_id": latest_forecast_id}
-
-
-# --- Save the planner's entered actuals ---
-@router.post("/save-actuals")
-async def save_actuals_data(
-    payload: SaveActualsRequest,
-    conn = Depends(get_hana_connection),
-    current_user: str = Depends(get_current_user)
-):
-    """Receives a list of actuals data and upserts it into the ACTUALS_DATA table."""
-    records_to_upsert = []
-    for update in payload.updates:
-        records_to_upsert.append((
-            update.product,
-            update.store,
-            update.date,
-            update.actual_units,
-            current_user
-        ))
-
-    if not records_to_upsert:
-        return {"status": "success", "message": "No updates to save."}
-
-    with conn.cursor() as cur:
-        # MERGE is the safest way to either INSERT a new actual or UPDATE an existing one.
-        # This is a robust pattern for HANA.
-        cur.executemany(
-            """
-            MERGE INTO ACTUALS_DATA AS target
-            USING (SELECT ? AS PRODUCTID, ? AS STOREID, ? AS SALESDATE, ? AS ACTUAL_UNITS, ? AS USER FROM DUMMY) AS source
-            ON target.PRODUCTID = source.PRODUCTID AND target.STOREID = source.STOREID AND target.SALESDATE = source.SALESDATE
-            WHEN MATCHED THEN
-                UPDATE SET target.ACTUAL_UNITS = source.ACTUAL_UNITS, target.ENTERED_BY = source.USER, target.ENTRY_TIMESTAMP = CURRENT_UTCTIMESTAMP
-            WHEN NOT MATCHED THEN
-                INSERT (PRODUCTID, STOREID, SALESDATE, ACTUAL_UNITS, ENTERED_BY)
-                VALUES (source.PRODUCTID, source.STOREID, source.SALESDATE, source.ACTUAL_UNITS, source.USER);
-            """,
-            records_to_upsert
-        )
-        conn.commit()
-
-    return {"status": "success", "message": f"Successfully saved {len(records_to_upsert)} actuals records."}
