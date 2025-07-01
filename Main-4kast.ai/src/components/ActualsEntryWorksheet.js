@@ -142,7 +142,7 @@ const ActualsEntryWorksheet = ({ forecastData, onSave }) => {
 
                       if (typeof forecast === 'number' && typeof actual === 'number') {
                         if(forecast > 0) {
-                            const diff = ((actual - forecast) / forecast) * 100;
+                            const diff = ((actual / forecast) - 1) * 100;
                             variance = `${diff.toFixed(1)}%`;
                             color = diff < 0 ? '#dc3545' : '#198754'; // Red for negative, green for positive
                         } else if (actual > 0) {
