@@ -1,0 +1,9 @@
+applications:
+  - name: 4kast-frontend
+    buildpacks:
+      - staticfile_buildpack
+    memory: 64M
+    disk_quota: 1G
+    path: build
+    env:
+      NODE_ENV: production

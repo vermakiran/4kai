@@ -3065,7 +3065,8 @@ async def get_dashboard_data(
         cur.execute("""
             SELECT MIN(FORECASTDATE), MAX(FORECASTDATE)
             FROM DBADMIN.FORECASTDATA
-            WHERE FORECASTID = ? AND PREDICTEDDEMAND IS NOT NULL
+            WHERE FORECASTID = ? 
+            AND PREDICTEDDEMAND IS NOT NULL OR HISTORICALDEMAND IS NOT NULL
         """, (latest_forecastid,))
         row = cur.fetchone()
         min_date = str(row[0]) if row and row[0] else ""

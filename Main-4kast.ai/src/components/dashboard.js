@@ -51,82 +51,6 @@ import Cookies from "js-cookie";
 import { DASHBOARD_ENDPOINT } from "./config";
 import { parseISO, format, isAfter, isBefore, isEqual, subDays, subMonths, startOfYear } from 'date-fns';
 
-// --- DATA FOR NEW DRILL-DOWN CHART ---
-const drillDownRegionData = [
-  { region: "North", Overforecast: 23, Underforecast: 12, Accurate: 65 },
-  { region: "South", Overforecast: 30, Underforecast: 20, Accurate: 50 },
-  { region: "East",  Overforecast: 18, Underforecast: 24, Accurate: 58 },
-  { region: "West",  Overforecast: 10, Underforecast: 15, Accurate: 75 },
-];
-const drillDownProductData = {
-  North: [
-    { product: "Apples", Overforecast: 5, Underforecast: 2, Accurate: 18 },
-    { product: "Oranges", Overforecast: 8, Underforecast: 4, Accurate: 17 },
-    { product: "Berries", Overforecast: 10, Underforecast: 6, Accurate: 30 },
-  ],
-  South: [
-    { product: "Bananas", Overforecast: 12, Underforecast: 8, Accurate: 10 },
-    { product: "Grapes", Overforecast: 8, Underforecast: 2, Accurate: 14 },
-    { product: "Melons", Overforecast: 10, Underforecast: 10, Accurate: 26 },
-  ],
-  East: [
-    { product: "Pears", Overforecast: 6, Underforecast: 11, Accurate: 14 },
-    { product: "Cherries", Overforecast: 7, Underforecast: 5, Accurate: 20 },
-    { product: "Peaches", Overforecast: 5, Underforecast: 8, Accurate: 24 },
-  ],
-  West: [
-    { product: "Apples", Overforecast: 2, Underforecast: 5, Accurate: 28 },
-    { product: "Bananas", Overforecast: 3, Underforecast: 2, Accurate: 20 },
-    { product: "Avocados", Overforecast: 5, Underforecast: 8, Accurate: 27 },
-  ],
-};
-// *** FIX: ADDED COMPLETE MOCK DATA FOR ALL REGIONS/PRODUCTS ***
-const drillDownTimeSeriesData = {
-  North: {
-    Apples: [
-      { date: "06-01", Overforecast: 1, Underforecast: 0, Accurate: 5 }, { date: "06-02", Overforecast: 0, Underforecast: 1, Accurate: 6 }, { date: "06-03", Overforecast: 1, Underforecast: 0, Accurate: 4 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 2 }, { date: "06-05", Overforecast: 1, Underforecast: 0, Accurate: 1 },
-    ],
-    Oranges: [
-       { date: "06-01", Overforecast: 2, Underforecast: 1, Accurate: 4 }, { date: "06-02", Overforecast: 1, Underforecast: 0, Accurate: 3 }, { date: "06-03", Overforecast: 2, Underforecast: 2, Accurate: 5 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 2 }, { date: "06-05", Overforecast: 2, Underforecast: 0, Accurate: 3 },
-    ],
-    Berries: [
-       { date: "06-01", Overforecast: 3, Underforecast: 1, Accurate: 8 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 9 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 7 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 6 }, { date: "06-05", Overforecast: 2, Underforecast: 1, Accurate: 10 },
-    ],
-  },
-  South: {
-    Bananas: [
-       { date: "06-01", Overforecast: 4, Underforecast: 2, Accurate: 2 }, { date: "06-02", Overforecast: 3, Underforecast: 3, Accurate: 3 }, { date: "06-03", Overforecast: 2, Underforecast: 1, Accurate: 1 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 2 }, { date: "06-05", Overforecast: 2, Underforecast: 1, Accurate: 2 },
-    ],
-    Grapes: [
-       { date: "06-01", Overforecast: 2, Underforecast: 0, Accurate: 4 }, { date: "06-02", Overforecast: 2, Underforecast: 1, Accurate: 3 }, { date: "06-03", Overforecast: 1, Underforecast: 0, Accurate: 5 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 1 }, { date: "06-05", Overforecast: 1, Underforecast: 0, Accurate: 1 },
-    ],
-    Melons: [
-       { date: "06-01", Overforecast: 3, Underforecast: 3, Accurate: 5 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 7 }, { date: "06-03", Overforecast: 1, Underforecast: 2, Accurate: 6 }, { date: "06-04", Overforecast: 2, Underforecast: 1, Accurate: 4 }, { date: "06-05", Overforecast: 2, Underforecast: 2, Accurate: 4 },
-    ],
-  },
-  East: {
-    Pears: [
-       { date: "06-01", Overforecast: 1, Underforecast: 4, Accurate: 3 }, { date: "06-02", Overforecast: 2, Underforecast: 3, Accurate: 5 }, { date: "06-03", Overforecast: 1, Underforecast: 2, Accurate: 4 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 1 }, { date: "06-05", Overforecast: 1, Underforecast: 1, Accurate: 1 },
-    ],
-    Cherries: [
-       { date: "06-01", Overforecast: 2, Underforecast: 1, Accurate: 6 }, { date: "06-02", Overforecast: 1, Underforecast: 2, Accurate: 5 }, { date: "06-03", Overforecast: 2, Underforecast: 1, Accurate: 4 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 3 }, { date: "06-05", Overforecast: 1, Underforecast: 0, Accurate: 2 },
-    ],
-    Peaches: [
-       { date: "06-01", Overforecast: 1, Underforecast: 2, Accurate: 7 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 8 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 5 }, { date: "06-04", Overforecast: 0, Underforecast: 2, Accurate: 3 }, { date: "06-05", Overforecast: 1, Underforecast: 1, Accurate: 1 },
-    ],
-  },
-  West: {
-    Apples: [
-       { date: "06-01", Overforecast: 0, Underforecast: 1, Accurate: 8 }, { date: "06-02", Overforecast: 1, Underforecast: 2, Accurate: 9 }, { date: "06-03", Overforecast: 0, Underforecast: 1, Accurate: 6 }, { date: "06-04", Overforecast: 1, Underforecast: 1, Accurate: 3 }, { date: "06-05", Overforecast: 0, Underforecast: 0, Accurate: 2 },
-    ],
-    Bananas: [
-       { date: "06-01", Overforecast: 1, Underforecast: 0, Accurate: 6 }, { date: "06-02", Overforecast: 0, Underforecast: 1, Accurate: 5 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 4 }, { date: "06-04", Overforecast: 1, Underforecast: 0, Accurate: 3 }, { date: "06-05", Overforecast: 0, Underforecast: 0, Accurate: 2 },
-    ],
-    Avocados: [
-       { date: "06-01", Overforecast: 1, Underforecast: 2, Accurate: 9 }, { date: "06-02", Overforecast: 2, Underforecast: 2, Accurate: 8 }, { date: "06-03", Overforecast: 1, Underforecast: 1, Accurate: 5 }, { date: "06-04", Overforecast: 0, Underforecast: 2, Accurate: 4 }, { date: "06-05", Overforecast: 1, Underforecast: 1, Accurate: 1 },
-    ],
-  },
-};
 
 // --- DRILL-DOWN CHART COMPONENT ---
 function DrillDownErrorChart({ regionData, productData, timeSeriesData }) {
@@ -268,9 +192,7 @@ function ChartCard({ title, children, onExpand }) {
   return (
     <>
       <Paper sx={{ p: 2, height: '100%', position: 'relative' }}>
-        <IconButton size="small" sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2 }} onClick={() => setOpen(true)} aria-label={`Expand ${title}`}>
-          <OpenInFullIcon fontSize="small" />
-        </IconButton>
+        
 
         {onExpand && (
           <IconButton
@@ -337,6 +259,8 @@ function FilterBar({ filters, onFilterChange, productFamilies, models, regions, 
     onFilterChange({ ...filters, [field]: event.target.value });
   };
 
+  console.log("FilterBar rendering with props:", { minDate, maxDate, startDate: filters.startDate, endDate: filters.endDate });
+
   return (
     <Paper sx={{ p: 2, mb: 3, borderRadius: 2, boxShadow: '0 8px 12px rgba(0,0,0,0.05)' }}>
       <Grid container spacing={2} alignItems="center">
@@ -397,7 +321,7 @@ function FilterBar({ filters, onFilterChange, productFamilies, models, regions, 
             size="small"
             InputLabelProps={{ shrink: true }}
             value={filters.startDate}
-            inputProps={{ min: minDate, max: maxDate }}
+            inputProps={{ min: minDate, max: filters.endDate }}
             onChange={handleChange('startDate')}
             InputProps={{
               startAdornment: (
@@ -417,7 +341,7 @@ function FilterBar({ filters, onFilterChange, productFamilies, models, regions, 
             size="small"
             InputLabelProps={{ shrink: true }}
             value={filters.endDate}
-            inputProps={{ min: minDate, max: maxDate }}
+            inputProps={{ min: filters.startDate, max: maxDate }}
             onChange={handleChange('endDate')}
             InputProps={{
               startAdornment: (
