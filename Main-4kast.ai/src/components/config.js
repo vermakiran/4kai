@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // Base URL configuration
-export const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://4kast-backend-v2.cfapps.eu10-005.hana.ondemand.com';
+export const BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://127.0.0.1:5000';
 
 // API endpoints
 export const LOGIN_ENDPOINT = `${BASE_URL}/api/auth/token`;

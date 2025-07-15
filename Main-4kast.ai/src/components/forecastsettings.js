@@ -426,6 +426,7 @@ const ForecastSettings = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const [timeBucket, setTimeBucket] = useState("Daily");
+  const [detectedDataFrequency, setDetectedDataFrequency] = useState('daily');
   const [forecastHorizon, setForecastHorizon] = useState("0");
   const [forecastLock, setForecastLock] = useState("0");
   const [granularity, setGranularity] = useState("Overall");
@@ -450,6 +451,7 @@ const ForecastSettings = () => {
   const columnSelectionRef = useRef(null);
   const uploadButtonRef = useRef(null);
   const [forecastResults, setForecastResults] = useState(null);
+  const [skippedItems, setSkippedItems] = useState([]);
   const [showForecastResults, setShowForecastResults] = useState(false);
 
   const mandatoryFields = ["Date", "Demand", "StoreID", "ProductID"];
@@ -597,6 +599,17 @@ const ForecastSettings = () => {
                 setColumnNames(Array.isArray(headers) ? headers : [headers]);
                 setImportedData(rows);
                 setShowColumns(true);
+
+                const dateHeader = headers.find(h => h.toLowerCase() === 'date') || headers[0];
+                const dates = result.data.map(row => row[dateHeader]).filter(Boolean);
+                const detectedFreq = detectDataFrequency(dates);
+                setDetectedDataFrequency(detectedFreq);
+
+                const capitalizedFreq = detectedFreq.charAt(0).toUpperCase() + detectedFreq.slice(1);
+                if (['Daily', 'Weekly', 'Monthly', 'Yearly'].includes(capitalizedFreq)) {
+                    setTimeBucket(capitalizedFreq);
+                }
+
                 setTimeout(() => {
                   if (columnSelectionRef.current) {
                     columnSelectionRef.current.scrollIntoView({ behavior: "smooth" });
@@ -865,6 +878,25 @@ const ForecastSettings = () => {
       if (result.status === "success") {
         setForecastResults(result);
         setShowForecastResults(true);
+        if (Array.isArray(result.skipped_items) && result.skipped_items.length > 0) {
+          setSkippedItems(result.skipped_items);
+        } else {
+          setSkippedItems([]);
+        }
+
+        const newSummary = {
+          "Forecast Type": result.forecast_type ?? 'N/A',
+          "Granularity Setting": result.config?.granularity ?? 'N/A',
+          "Time Bucket": result.config?.timeBucket ?? 'N/A',
+          "Forecast Horizon": result.config?.forecastHorizon ?? 'N/A',
+          "Models Run": (result.config?.selectedModels?.length > 0) ? result.config.selectedModels.join(', ') : 'Best Fit',
+          "Original Data Frequency": result.dataFrequency ?? (dataSummary ? dataSummary.dataFrequency : 'N/A'),
+          "Rows in Original Dataset": dataSummary?.rowCount ?? 'N/A'
+        };
+
+        setDataSummary(newSummary);
+        setShowSummary(true);
+        
         showAlert(`Model ${selectedModel} execution completed successfully!`, "success");
       } else {
         showAlert(`Warning: ${result.message || "Unknown status returned from API"}`, "warning");
@@ -876,7 +908,7 @@ const ForecastSettings = () => {
   };
 
   useEffect(() => {
-    const requiredFilled = forecastHorizon && forecastLock && selectedDataset;
+    const requiredFilled = parseInt(forecastHorizon, 10) > 0 && forecastLock && selectedDataset;
     // Only check selectedModel if forecastMethod is "Select From List"
     const modelRequired = forecastMethod === "Select From List" ? selectedModel : true;
     setCanRunModel(requiredFilled && modelRequired);
@@ -1132,11 +1164,11 @@ const ForecastSettings = () => {
                   justifyContent: "center",
                   borderRadius: "50%",
                   backgroundColor: alert.type === "error" ? "#FEE2E2" : 
-                                 alert.type === "success" ? "#DCFCE7" : 
-                                 alert.type === "warning" ? "#FEF9C3" : "#DBEAFE",
+                                alert.type === "success" ? "#DCFCE7" : 
+                                alert.type === "warning" ? "#FEF9C3" : "#DBEAFE",
                   color: alert.type === "error" ? "#DC2626" : 
-                         alert.type === "success" ? "#16A34A" : 
-                         alert.type === "warning" ? "#CA8A04" : "#2563EB"
+                        alert.type === "success" ? "#16A34A" : 
+                        alert.type === "warning" ? "#CA8A04" : "#2563EB"
                 }}>
                   {alert.type === "error" && (
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1477,14 +1509,22 @@ const ForecastSettings = () => {
         <div className="time-settings">
           <h4 style={{ fontSize: "18px" }}><strong>Time Settings :</strong></h4>
           <div className="settings-card-group" style={{ display: "flex", gap: "10px" }}>
+            
             <div className="settings-card" style={{ flex: "0.9" }}>
               <h5 style={{ fontSize: "16px" }}>Time Bucket</h5>
               <div className="input-group">
                 <select style={{ width: "120px" }} value={timeBucket} onChange={(e) => setTimeBucket(e.target.value)}>
-                  <option value="Daily">Daily</option>
-                  <option value="Weekly">Weekly</option>
-                  <option value="Monthly">Monthly</option>
-                  <option value="Yearly">Yearly</option>
+                  {(() => {
+                    const freqHierarchy = { 'daily': 1, 'weekly': 2, 'monthly': 3, 'yearly': 5 };
+                    const detectedLevel = freqHierarchy[detectedDataFrequency] || 1;
+
+                    return [
+                    <option key="Daily" value="Daily" disabled={freqHierarchy['daily'] < detectedLevel}>Daily</option>,
+                    <option key="Weekly" value="Weekly" disabled={freqHierarchy['weekly'] < detectedLevel}>Weekly</option>,
+                    <option key="Monthly" value="Monthly" disabled={freqHierarchy['monthly'] < detectedLevel}>Monthly</option>,
+                    <option key="Yearly" value="Yearly" disabled={freqHierarchy['yearly'] < detectedLevel}>Yearly</option>
+                  ];
+                })()}
                 </select>
               </div>
             </div>
@@ -1492,12 +1532,22 @@ const ForecastSettings = () => {
             <div className="settings-card">
               <h5 style={{ fontSize: "16px" }}>Forecast Parameters</h5>
               <div className="input-group">
-                <label>Forecast Horizon:</label>
+                <label>
+                  Forecast Next {forecastHorizon || 'X'} {timeBucket.replace(/ly$/, 's').toLowerCase()}
+                  <span 
+                    className="tooltip" 
+                    title={`The number of future periods to forecast. E.g., 4 with 'Weekly' time bucket means forecasting the next 4 weeks.`}
+                    style={{ cursor: 'pointer', marginLeft: '5px', color: '#007bff' }}
+                  >
+                    ⓘ
+                  </span>
+                </label>
                 <input 
                   type="number" 
                   value={forecastHorizon} 
                   onChange={handleForecastHorizonChange}
-                  min="0"
+                  min="1"
+                  placeholder="e.g., 12"
                 />
               </div>
               <div className="input-group">
@@ -1681,6 +1731,26 @@ const ForecastSettings = () => {
                 Download CSV
               </button>
             </div>
+            {skippedItems.length > 0 && (
+              <div className="skipped-items-warning" style={{
+                padding: '15px',
+                margin: '0 0 20px 0',
+                border: '1px solid #ffc107',
+                backgroundColor: '#fff3cd',
+                borderRadius: '8px',
+                maxHeight: '200px',
+                overflowY: 'auto'
+              }}>
+                <h5 style={{ marginTop: 0, color: '#856404' }}>
+                  Warning: Some items were not forecasted due to insufficient data
+                </h5>
+                <ul style={{ paddingLeft: '20px', margin: 0, fontSize: '12px' }}>
+                  {skippedItems.map((item, index) => (
+                    <li key={index}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="results-content">
               <h4>Model Performance</h4>
               {Object.entries(forecastResults.results).map(([modelName, metrics]) => (

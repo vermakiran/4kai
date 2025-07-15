@@ -27,5 +27,4 @@ COPY . .
 # Expose the port (change if you use something else)
 EXPOSE 8080
 
-# Run your app (adjust if your entry point is different)
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8080", "app.main:app"]
+CMD ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--timeout", "900", "-b", "0.0.0.0:8080", "app.main:app"]

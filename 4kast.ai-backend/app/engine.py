@@ -1,4 +1,10 @@
 # app/engine.py
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppresses INFO and WARNING logs
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1' # Tells TensorFlow to use CPU only
+
+
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Request, Form, status, Path, Query
 from fastapi.responses import FileResponse, Response, JSONResponse
 import plotly.graph_objects as go
@@ -288,21 +294,21 @@ def api_infer_frequency(df, date_col='Date'):
             return 'D'  # Default to daily
         
         # Get the datetime series
-        dates = pd.to_datetime(df[date_col], errors='coerce').dropna()
+        dates = pd.Series(pd.to_datetime(df[date_col], errors='coerce').dropna().unique()).sort_values()
         
         if len(dates) < 2:
             print("Too few dates to infer frequency. Defaulting to 'D'.")
             return 'D'
         
         # Calculate differences between consecutive dates
-        date_diffs = dates.sort_values().diff().dt.days.dropna()
+        date_diffs = dates.diff().dt.days.dropna()
         
         if date_diffs.empty:
             print("No valid differences to infer frequency. Defaulting to 'D'.")
             return 'D'
         
         # Get the most common difference
-        most_common_diff = date_diffs.value_counts().index[0]
+        most_common_diff = date_diffs.mode()[0]
         
         # Map to frequency based on most common difference
         freq_map = {
@@ -319,8 +325,12 @@ def api_infer_frequency(df, date_col='Date'):
             366: 'Y'    # Yearly (366 days - leap year)
         }
         
-        # Get frequency or default to daily
-        freq = freq_map.get(most_common_diff, 'D')
+        closest_diff = min(freq_map.keys(), key=lambda k: abs(k - most_common_diff))       
+        
+        if abs(closest_diff - most_common_diff) <= 1:
+            freq = freq_map.get(closest_diff, 'D')
+        else:
+            freq = 'D' # Default if no close match
         
         print(f"Inferred frequency: {freq} (most common diff: {most_common_diff} days)")
         return freq
@@ -384,16 +394,8 @@ async def run_forecast(request: Request, current_user: str = Depends(get_current
                 forecast_lock,
                 column_mappings
             )
-            
-            # --- LOGGING: Print the raw result ---
-            print("\n--- RUN_FORECAST_FOR_FILE RAW RESULT ---")
-            pprint.pprint(result)
-
 
             serializable_result = make_json_serializable(result)
-            # --- LOGGING: Print the serializable result ---
-            print("\n--- RUN_FORECAST_FOR_FILE SERIALIZABLE RESULT ---")
-            pprint.pprint(serializable_result)
             try:
                 json.dumps(serializable_result)  # test if serializable
                 return JSONResponse(content=serializable_result, status_code=200)
@@ -512,138 +514,75 @@ def ensure_id_columns_exist(df, forecast_type):
 # Function to infer frequency
 def infer_frequency(df, date_col='Date'):
     try:
-        if date_col in df.index.names:
-            dates = df.index
-        elif date_col in df.columns:
-            dates = pd.to_datetime(df[date_col], errors='coerce').dropna()
-        else:
-            raise ValueError(f"'{date_col}' not found in DataFrame columns or index")
-        
-        if len(dates) < 2:
-            logging.info("Too few dates to infer frequency. Defaulting to 'D'.")
+        if date_col not in df.columns:
+            print(f"'{date_col}' not found in DataFrame columns")
             return 'D'
-        
-        # Check if dates are already aggregated (e.g., from aggregate_data)
-        date_diffs = dates.to_series().sort_values().diff().dt.days.dropna()
-        if date_diffs.empty:
-            logging.info("No valid differences to infer frequency. Defaulting to 'D'.")
-            return 'D'
-        
-        most_common_diff = date_diffs.value_counts().index[0]
-        freq_map = {1: 'D', 7: 'W', 30: 'M', 31: 'M', 28: 'M', 90: 'Q', 91: 'Q', 92: 'Q', 365: 'Y', 366: 'Y'}
-        freq = freq_map.get(most_common_diff, 'D')
-        
-        # If aggregated, override with the aggregation rule
-        if 'aggregation_period' in st.session_state:
-            agg_map = {'Daily': 'D', 'Weekly': 'W', 'Monthly': 'M', 'Yearly': 'Y'}
-            freq = agg_map.get(st.session_state['aggregation_period'], freq)
-        
-        logging.info(f"Inferred frequency: {freq} (most common diff: {most_common_diff} days)")
-        return freq
-    except Exception as e:
-        logging.error(f"Error inferring frequency: {str(e)}")
-        return 'D'  # Default to daily on failure
 
+        # Convert to datetime and get a Series of UNIQUE, SORTED dates
+        unique_dates = pd.Series(pd.to_datetime(df[date_col], errors='coerce').dropna().unique()).sort_values()
+
+        if len(unique_dates) < 2:
+            # Not enough unique dates to infer, default to Daily
+            return 'D'
+
+        # Calculate differences between consecutive UNIQUE dates
+        date_diffs = unique_dates.diff().dt.days.dropna()
+
+        if date_diffs.empty:
+            return 'D'
+
+        most_common_diff = date_diffs.mode()[0]
+
+        freq_map = {
+            1: 'D', 7: 'W', 14: 'W', 28: 'M', 29: 'M', 30: 'M', 31: 'M',
+            90: 'Q', 91: 'Q', 92: 'Q', 365: 'Y', 366: 'Y'
+        }
+        
+        closest_diff = min(freq_map.keys(), key=lambda k: abs(k - most_common_diff))
+        
+        if abs(closest_diff - most_common_diff) <= 1:
+            req = freq_map.get(closest_diff, 'D')
+        else:
+            freq = 'D'
+        
+        print(f"Inferred frequency: {freq} (most common diff: {most_common_diff} days)")
+        return freq
+
+    except Exception as e:
+        print(f"Error inferring frequency: {str(e)}")
+        return 'D'
 
 # Function to detect seasonality
-def detect_seasonality(df, max_lags=50):
-    logging.info("### Seasonality Detection Started")
-
-    if len(df) < 4:  # Arbitrary minimum threshold for meaningful analysis
-        logging.warning(f"Dataset too small ({len(df)} rows) for seasonality detection. Defaulting to period=7.")
-        return 7
-
-    max_lags = min(max_lags, int(len(df) / 2) - 1)  # Ensure it's < 50% and at least 1 less than half
-    if max_lags < 1:
-        logging.warning("Sample size too small for meaningful PACF analysis. Defaulting to period=7.")
-        return 7
-    
-    # Calculate ACF and PACF
-    acf_values = acf(df['Demand'], nlags=max_lags)
-    pacf_values = pacf(df['Demand'], nlags=max_lags)
-    
-    # Find potential seasonal periods from ACF
-    potential_periods = []
-    threshold = 0.2  # Correlation threshold
-    for i in range(1, len(acf_values)):
-        if acf_values[i] > threshold:
-            potential_periods.append(i)
-    
-    # Plot ACF and PACF
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-    plot_acf(df['Demand'], lags=max_lags, ax=ax1)
-    plot_pacf(df['Demand'], lags=max_lags, ax=ax2)
-    plt.tight_layout()
-    plt.show()
-    
-    # Perform seasonal decomposition with different potential periods
-    best_period = None
-    min_residual_variance = float('inf')
-    
-    # Try different seasonal periods
-    for period in [7, 12, 24, 30, 52]:  # Common business periods
-        try:
-            decomposition = seasonal_decompose(
-                df.set_index('Date')['Demand'],
-                period=period,
-                model='additive'
-            )
-            residual_variance = np.var(decomposition.resid.dropna())
-            
-            # Plot decomposition for each period
-            fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 12))
-            decomposition.observed.plot(ax=ax1, title=f'Observed (Period={period})')
-            decomposition.trend.plot(ax=ax2, title='Trend')
-            decomposition.seasonal.plot(ax=ax3, title='Seasonal')
-            decomposition.resid.plot(ax=ax4, title='Residual')
-            plt.tight_layout()
-            plt.show()
-            
-            # Update best period if this decomposition has lower residual variance
-            if residual_variance < min_residual_variance:
-                min_residual_variance = residual_variance
-                best_period = period
-                
-        except Exception as e:
-            logging.warning(f"Failed to decompose with period {period}: {str(e)}")
-            continue
-    
-    # Perform frequency domain analysis
+# In app/engine.py
+def detect_seasonality(df, max_lags=50):   
+    logging.info("### Seasonality Detection Started ")
     try:
-        from scipy import signal # type: ignore
-        f, Pxx = signal.periodogram(df['Demand'].fillna(method='ffill'))
-        dominant_periods = 1/f[signal.find_peaks(Pxx)[0]]
-        dominant_periods = dominant_periods[dominant_periods < len(df)/2]
-        logging.info("### Dominant Periods from Spectral Analysis")
-        logging.info(f"Detected periods: {[round(p, 1) for p in dominant_periods]}")
-    except Exception as e:
-        logging.warning(f"Spectral analysis failed: {str(e)}")
-    
-    # Infer frequency from date index
-    date_freq = infer_frequency(df)
-    freq_based_period = {
-        'D': 7,    # Daily -> Weekly seasonality
-        'W': 52,   # Weekly -> Yearly seasonality
-        'M': 12,   # Monthly -> Yearly seasonality
-        'Q': 4,    # Quarterly -> Yearly seasonality
-        'Y': 1     # Yearly -> No seasonality
-    }.get(date_freq, 7)  # Default to weekly if unknown
-    
-    # Combine all information to make final decision
-    if best_period is None:
-        best_period = freq_based_period
+        
+        if 'Date' not in df.columns:
+            if isinstance(df.index, pd.DatetimeIndex):
+                df = df.reset_index()
+            else:
+                logging.warning("detect_seasonality requires a 'Date' column. Defaulting to period=7.")
+                return 7
 
-    best_period = 7  # Default fallback, refine this based on your full logic
-    if potential_periods:
-        best_period = min(potential_periods)  
-    
-    logging.info("### Seasonality Analysis Results:")
-    logging.info(f"- Best detected period: {best_period}")
-    logging.info(f"- Data frequency: {date_freq}")
-    logging.info(f"- Potential periods from ACF: {potential_periods}")
-    logging.info(f"- Frequency-based suggestion: {freq_based_period}")
-    
-    return best_period
+        inferred_freq = api_infer_frequency(df)
+        logging.info(f"Data frequency for seasonality check: {inferred_freq}")
+
+        freq_to_seasonality_map = {
+            'D': 7,    # Daily data -> Weekly seasonality
+            'W': 52,   # Weekly data -> Yearly seasonality
+            'M': 12,   # Monthly data -> Yearly seasonality
+            'Q': 4,    # Quarterly data -> Yearly seasonality
+            'Y': 1     # Yearly data -> No seasonality
+        }
+
+        best_period = freq_to_seasonality_map.get(inferred_freq, 7)
+        logging.info(f"### Seasonality Analysis Results: Based on frequency '{inferred_freq}', suggested period is {best_period}.")
+        return best_period
+
+    except Exception as e:
+        logging.error(f"Error during fast seasonality detection: {e}. Defaulting to period=7.")
+        return 7
 
 def encode_categorical_columns(df, categorical_columns):
     try:
@@ -659,29 +598,48 @@ def encode_categorical_columns(df, categorical_columns):
 # Function to calculate metrics
 def calculate_metrics(y_true, y_pred):
     epsilon = 1e-6 # Prevents division by 0
+    MAPE_CAP = 1000.0
 
     if y_true is None or y_pred is None:
         logging.warning("Invalid input: y_true or y_pred is None.")
-        return None, None, None
+        return None, None, None, None
+    
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+    
+    if y_true.shape != y_pred.shape:
+        logging.warning("Shape mismatch between y_true and y_pred.")
+        return None, None, None, None
 
     if np.any(np.isnan(y_pred)) or np.any(np.isinf(y_pred)):
         logging.warning("Invalid predictions: NaN or Inf values detected.")
-        return None, None, None
+        return None, None, None, None
 
     try:
         rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-        mape = np.mean(np.abs((y_true-y_pred)/(y_true+epsilon))) * 100
+        nonzero_idx = y_true > epsilon
+        
+        if np.any(nonzero_idx):
+            individual_pe = np.abs((y_true[nonzero_idx] - y_pred[nonzero_idx]) / y_true[nonzero_idx]) * 100
+            capped_pe = np.minimum(individual_pe, MAPE_CAP)
+            mape = np.mean(capped_pe)
+        else:               
+            mape = 0.0 if np.sum(np.abs(y_pred)) == 0 else MAPE_CAP
+            if np.isnan(mape):
+                mape = None
+                
         mae = mean_absolute_error(y_true, y_pred)
         bias = np.mean(y_pred - y_true)
         return rmse, mape, mae, bias
+    
     except Exception as e:
         logging.error(f"Error calculating metrics: {e}")
         return None, None, None, None
 
 # Function to auto-tune SARIMA
-def auto_tune_sarima(train, seasonal_period):
+def auto_tune_sarima(demand_series, seasonal_period):
     model = auto_arima(
-        train['Demand'],
+        demand_series,
         seasonal=True,
         m=seasonal_period,
         stepwise=True,
@@ -744,8 +702,8 @@ def random_forest_model(train, val, test, horizon=30):
 
         # Train model with enhanced parameters
         model = RandomForestRegressor(
-            n_estimators=500,
-            max_depth=10,
+            n_estimators=100,
+            max_depth=8,
             min_samples_split=5,
             min_samples_leaf=2,
             max_features='sqrt',
@@ -846,7 +804,7 @@ def xgboost_model(train, val, test, horizon=30):
 
         # Train model
         model = XGBRegressor(
-            n_estimators=500,
+            n_estimators=150,
             learning_rate=0.01,
             max_depth=8,
             subsample=0.8,
@@ -932,7 +890,7 @@ def lstm_model(train, val, test, n_steps=3, horizon=30):
         
         # Build model
         model = Sequential([
-            LSTM(50, activation='relu', input_shape=(n_steps, 1)),
+            LSTM(25, activation='relu', input_shape=(n_steps, 1)),
             Dense(1)
         ])
         model.compile(optimizer='adam', loss='mse')
@@ -942,7 +900,7 @@ def lstm_model(train, val, test, n_steps=3, horizon=30):
         model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
-            epochs=50,
+            epochs=15,
             batch_size=32,
             callbacks=[early_stop],
             verbose=0
@@ -1074,9 +1032,9 @@ def gru_model(train, val, test, n_steps=14, additional_cols=None, horizon=30):
 
         # Build GRU model
         model = Sequential([
-            GRU(128, activation='tanh', return_sequences=True, input_shape=(n_steps, len(features))),
+            GRU(32, activation='tanh', return_sequences=True, input_shape=(n_steps, len(features))),
             Dropout(0.2),
-            GRU(64, activation='tanh'),
+            GRU(16, activation='tanh'),
             Dense(1)
         ])
 
@@ -1097,8 +1055,8 @@ def gru_model(train, val, test, n_steps=14, additional_cols=None, horizon=30):
         history = model.fit(
             X_train, y_train,
             validation_data=(X_val, y_val),
-            epochs=50,
-            batch_size=16,
+            epochs=15,
+            batch_size=32,
             callbacks=[early_stop, reduce_lr],
             verbose=1
         )
@@ -1219,7 +1177,7 @@ def gaussian_process_model(train, val, test, horizon=30):
         # Train model
         model = GaussianProcessRegressor(
             kernel=kernel,
-            n_restarts_optimizer=10,
+            n_restarts_optimizer=2,
             random_state=42,
             normalize_y=False  # We're handling normalization ourselves
         )
@@ -1317,16 +1275,23 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
     df_copy.sort_index(inplace=True)
     results = {}
     future_forecasts = {}
+    skipped_items_log = [] 
 
     # Ensure 'Demand' column is of type float64
     df_copy['Demand'] = df_copy['Demand'].astype('float64')
-
-    # Detect seasonality with fallback
-    try:
-        seasonal_period = detect_seasonality(df_copy.reset_index())
-    except Exception as e:
-        logging.warning(f"Seasonality detection failed: {e}. Defaulting to period=7.")
-        seasonal_period = 7
+    
+    seasonal_period = None      
+    seasonal_models = {'SARIMA', 'HWES'}
+    
+    if any(model in seasonal_models for model in selected_models):
+        logging.info("A seasonal model was selected. Running seasonality detection...")
+        try:
+            seasonal_period = detect_seasonality(df_copy.reset_index())
+        except Exception as e:
+            logging.warning(f"Seasonality detection failed: {e}. Defaulting to period=7.")
+            seasonal_period = 7
+    else:
+        logging.info("No seasonal models selected. Skipping seasonality detection.")
 
     # Split data into train, val, and test
     train_val, test = train_test_split(df_copy, test_size=0.2, shuffle=False)
@@ -1339,7 +1304,7 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
     train_encoded = encode_categorical_columns(train.reset_index(), categorical_columns)
     val_encoded = encode_categorical_columns(val.reset_index(), categorical_columns)
     test_encoded = encode_categorical_columns(test.reset_index(), categorical_columns)
-
+    
     # If forecast_type is Item-wise or Store-Item Combination, we need to handle multiple items
     if forecast_type in ["Item-wise", "Store-Item Combination"] and item_col and item_col in df_copy.columns:
         unique_items = df_copy[item_col].unique()
@@ -1350,13 +1315,19 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
             future_forecasts[item] = {}
             item_df = df_copy[df_copy[item_col] == item].copy()
             
-            if len(item_df) < 2:
-                logging.warning(f"Insufficient data for item {item}: {len(item_df)} rows. Skipping.")
-                continue
+            try:
+                if len(item_df) < 3:
+                    raise ValueError("Not enough data points for a train/val/test split.")
+                item_train_val, item_test = train_test_split(item_df, test_size=0.2, shuffle=False)
+                item_train, item_val = train_test_split(item_train_val, test_size=0.25, shuffle=False)
+                if item_train.empty or item_val.empty or item_test.empty:
+                    raise ValueError("One of the data splits is empty.")
             
-            # Split data for this item
-            item_train_val, item_test = train_test_split(item_df, test_size=0.2, shuffle=False)
-            item_train, item_val = train_test_split(item_train_val, test_size=0.25, shuffle=False)
+            except ValueError as e:
+                log_message = f"Item '{item}': {len(item_df)} rows. {e}. Skipped."
+                logging.warning(log_message)
+                skipped_items_log.append(log_message)
+                continue
             
             # Run forecasts for each model
             for model_name in selected_models:
@@ -1364,150 +1335,217 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
                     if model_name == 'AR':
                         model = AutoReg(item_df['Demand'], lags=2).fit()
                         # Training performance
-                        train_forecast = model.predict(start=0, end=len(item_df)-1)
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast)
+                        train_forecast = model.predict(start=0, end=len(item_train)-1)
+                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_train['Demand'], train_forecast)
                         # Validation performance
-                        val_forecast = model.predict(start=len(item_df), end=len(item_df)+len(item_df)-1)
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast)
+                        val_forecast = model.predict(start=len(item_train), end=len(item_train) + len(item_val) - 1)
+                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_val['Demand'], val_forecast)
                         # Test performance
-                        test_forecast = model.predict(start=len(item_df), end=len(item_df)+len(item_df)-1)
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast)
+                        test_forecast = model.predict(start=len(item_train) + len(item_val), end=len(item_train) + len(item_val) + len(item_test) - 1)
+                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_test['Demand'], test_forecast)
+                        
                         results[f"AR_{item}"] = {
-                            'train': (train_rmse, train_mape, train_mae, train_bias),
-                            'val': (val_rmse, val_mape, val_mae, val_bias),
-                            'test': (test_rmse, test_mape, test_mae, train_bias)
-                        }
-                        # Future forecast
-                        future_forecast = model.predict(start=len(item_df), end=len(item_df)+horizon-1)  # Use horizon instead of 29
-                        future_forecasts[item]['AR'] = future_forecast.tolist()
-                    
-                    elif model_name == 'ARMA':
-                        model = ARIMA(item_df['Demand'], order=(2, 0, 1)).fit()
-                        # Training performance
-                        train_forecast = model.predict(start=0, end=len(item_df)-1)
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast)
-                        # Validation performance
-                        val_forecast = model.predict(start=len(item_df), end=len(item_df)+len(item_df)-1)
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast)
-                        # Test performance
-                        test_forecast = model.predict(start=len(item_df), end=len(item_df)+len(item_df)-1)
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast)
-                        results[f"ARMA_{item}"] = {
                             'train': (train_rmse, train_mape, train_mae, train_bias),
                             'val': (val_rmse, val_mape, val_mae, val_bias),
                             'test': (test_rmse, test_mape, test_mae, test_bias)
                         }
-                        # Future forecast
-                        future_forecast = model.predict(start=len(item_df), end=len(item_df)+len(item_df)-1)  # Use horizon instead of 29
-                        future_forecasts[item]['ARMA'] = future_forecast.tolist()
+                        
+                        # future forecast 
+                        final_model = AutoReg(item_df['Demand'], lags=2).fit()
+                        future_forecast = final_model.predict(start=len(item_df), end=len(item_df) + horizon - 1)
+                        future_forecasts[item]['AR'] = future_forecast.tolist()
+                        
+                    elif model_name == 'ARIMA':
+                        try:
+                            # Print shape and preview
+                            print(f"[ARIMA] {item}: Demand len={len(item_df['Demand'])} (train={len(item_train)}, val={len(item_val)}, test={len(item_test)})")
+                            # Fit on training data
+                            model = ARIMA(item_train['Demand'], order=(2, 0, 1))
+                            fitted_model = model.fit()
+                            # Forecast for val+test
+                            n_forecast = len(item_val) + len(item_test)
+                            val_test_forecast = fitted_model.forecast(steps=n_forecast)
+                            val_forecast = val_test_forecast[:len(item_val)]
+                            test_forecast = val_test_forecast[len(item_val):]
+                            # Metrics
+                            train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_train['Demand'], fitted_model.fittedvalues)
+                            val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_val['Demand'], val_forecast)
+                            test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_test['Demand'], test_forecast)
+                            results[f"ARIMA_{item}"] = {
+                                'train': (train_rmse, train_mape, train_mae, train_bias),
+                                'val': (val_rmse, val_mape, val_mae, val_bias),
+                                'test': (test_rmse, test_mape, test_mae, test_bias)
+                            }
+                            # Fit final model for all data, forecast future
+                            final_model = ARIMA(item_df['Demand'], order=(2, 0, 1)).fit()
+                            future_forecast = final_model.forecast(steps=horizon)
+                            print(f"[ARIMA] {item}: Forecasted {len(future_forecast)} steps. First 3: {future_forecast[:3].tolist()}")
+                            future_forecasts[item]['ARIMA'] = future_forecast.tolist()
+                        except Exception as e:
+                            print(f"[ARIMA] {item} failed: {e}")
+                            results[f"ARIMA_{item}"] = str(e)
                     
                     elif model_name == 'SARIMA':
-                        model = auto_tune_sarima(item_df, seasonal_period)
-                        # Training performance
-                        train_forecast = model.predict_in_sample()
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast)
-                        # Validation performance
-                        val_forecast = model.predict(n_periods=len(item_df))
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast)
-                        # Test performance
-                        test_forecast = model.predict(n_periods=len(item_df))
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast)
+                        #Train the model 
+                        model = auto_tune_sarima(item_train['Demand'], seasonal_period)
+                        
+                        # Step 2: Calculate metrics correctly
+                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_train['Demand'], model.predict_in_sample())                       
+                        val_test_forecast = model.predict(n_periods=len(item_val) + len(item_test))
+                        val_forecast = val_test_forecast[:len(item_val)]
+                        test_forecast = val_test_forecast[len(item_val):]
+                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_val['Demand'], val_forecast)
+                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_test['Demand'], test_forecast)
+                        
                         results[f"SARIMA_{item}"] = {
                             'train': (train_rmse, train_mape, train_mae, train_bias),
                             'val': (val_rmse, val_mape, val_mae, val_bias),
                             'test': (test_rmse, test_mape, test_mae, test_bias)
                         }
-                        # Future forecast: Generate forecasts for the next horizon time periods
-                        future_forecast = model.predict(n_periods=horizon)
+                        
+                        #final future forecast 
+                        final_model = auto_tune_sarima(item_df['Demand'], seasonal_period)
+                        future_forecast = final_model.predict(n_periods=horizon)
                         future_forecasts[item]['SARIMA'] = future_forecast.tolist()
                     
                     elif model_name == 'VAR' and len(additional_cols) > 0:
-                        train_vars = item_df[['Demand'] + [col + '_mapped' for col in additional_cols]]
-                        model = VAR(train_vars)
-                        model_fitted = model.fit()
-                        # Training performance
-                        train_forecast = model_fitted.forecast(train_vars.values[-model_fitted.k_ar:], steps=len(item_df))
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast[:, 0])
-                        # Validation performance
-                        val_forecast = model_fitted.forecast(train_vars.values[-model_fitted.k_ar:], steps=len(item_df))
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast[:, 0])
-                        # Test performance
-                        test_forecast = model_fitted.forecast(train_vars.values[-model_fitted.k_ar:], steps=len(item_df))
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast[:, 0])
+
+                        df_train = item_train[['Demand'] + additional_cols]
+                        df_val = item_val[['Demand'] + additional_cols]
+                        df_test = item_test[['Demand'] + additional_cols]
+                        df_train_diff = df_train.diff().dropna()
+
+                        if len(df_train_diff) < 10:
+                            logging.warning(f"Not enough data for VAR on item {item} after differencing. Skipping.")
+                            continue
+                        
+                        model = VAR(df_train_diff)
+                        model_fitted = model.fit(maxlags=5, ic='aic')
+                        lag_order = model_fitted.k_ar
+                        
+                        train_pred_diff = model_fitted.predict(start=0, end=len(df_train_diff) - 1)
+                        # Invert the predictions
+                        train_pred = df_train.iloc[1:].copy() # Align indexes with differenced data
+                        train_pred.iloc[lag_order:] = df_train.iloc[:-lag_order].values + train_pred_diff[lag_order:].cumsum()
+                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(df_train['Demand'][lag_order+1:], train_pred['Demand'][lag_order+1:])
+
+                        forecast_input = df_train_diff.values[-lag_order:]
+                        future_pred_diff = model_fitted.forecast(y=forecast_input, steps=len(df_val) + len(df_test))
+                        
+                        df_future_pred_diff = pd.DataFrame(future_pred_diff, columns=df_train.columns)
+                        last_train_actual = df_train.iloc[-1]
+                        df_future_pred = df_future_pred_diff.cumsum() + last_train_actual
+
+                        val_pred = df_future_pred.iloc[:len(df_val)]
+                        test_pred = df_future_pred.iloc[len(df_val):]
+
+                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(df_val['Demand'], val_pred['Demand'])
+                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(df_test['Demand'], test_pred['Demand'])
+
                         results[f"VAR_{item}"] = {
                             'train': (train_rmse, train_mape, train_mae, train_bias),
                             'val': (val_rmse, val_mape, val_mae, val_bias),
                             'test': (test_rmse, test_mape, test_mae, test_bias)
                         }
-                        # Future forecast
-                        future_forecast = model_fitted.forecast(train_vars.values[-model_fitted.k_ar:], steps=horizon)
-                        future_forecasts['VAR'] = future_forecast[:, 0].tolist()
-                    
+
+                        final_future_forecast_diff = model_fitted.forecast(y=forecast_input, steps=horizon)
+                        df_final_forecast_diff = pd.DataFrame(final_future_forecast_diff, columns=df_train.columns)
+                        df_final_forecast = df_final_forecast_diff.cumsum() + last_train_actual
+                        future_forecasts[item]['VAR'] = df_final_forecast['Demand'].tolist()
+                        
                     elif model_name == 'VARMAX' and len(additional_cols) > 0:
-                        train_vars = item_df[['Demand'] + [col + '_mapped' for col in additional_cols]]
-                        model = VARMAX(train_vars, order=(1, 1)).fit(disp=False)
-                        # Training performance
-                        train_forecast = model.forecast(steps=len(item_df))
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast['Demand'])
-                        # Validation performance
-                        val_forecast = model.forecast(steps=len(item_df))
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast['Demand'])
-                        # Test performance
-                        test_forecast = model.forecast(steps=len(item_df))
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast['Demand'])
+
+                        varmax_df_train = item_train[['Demand'] + additional_cols]
+                        model = VARMAX(varmax_df_train, order=(1, 1)).fit(disp=False)
+
+                        train_pred = model.predict(start=0, end=len(varmax_df_train) - 1)
+                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_train['Demand'], train_pred['Demand'])
+
+                        future_pred = model.forecast(steps=len(item_val) + len(item_test))
+
+                        val_pred = future_pred.iloc[:len(item_val)]
+                        test_pred = future_pred.iloc[len(item_val):]
+
+                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_val['Demand'], val_pred['Demand'])
+                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_test['Demand'], test_pred['Demand'])
+
                         results[f"VARMAX_{item}"] = {
                             'train': (train_rmse, train_mape, train_mae, train_bias),
                             'val': (val_rmse, val_mape, val_mae, val_bias),
                             'test': (test_rmse, test_mape, test_mae, test_bias)
                         }
-                        # Future forecast
-                        future_forecast = model.forecast(steps=horizon)
-                        future_forecasts[item]['VARMAX'] = future_forecast['Demand'].tolist()
+
+                        final_future_forecast = model.forecast(steps=horizon)
+                        future_forecasts[item]['VARMAX'] = final_future_forecast['Demand'].tolist()
                     
                     elif model_name == 'SES':
-                        model = SimpleExpSmoothing(item_df['Demand']).fit()
-                        # Training performance
-                        train_forecast = model.forecast(steps=len(item_df))
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast)
-                        # Validation performance
-                        val_forecast = model.forecast(steps=len(item_df))
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast)
-                        # Test performance
-                        test_forecast = model.forecast(steps=len(item_df))
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast)
+                        freq = pd.infer_freq(item_train.index)
+                        item_train_resampled = item_train.asfreq(freq)
+                        model = SimpleExpSmoothing(item_train_resampled['Demand']).fit()
+                        val_test_forecast = model.forecast(steps=len(item_val) + len(item_test))
+                        val_forecast = val_test_forecast[:len(item_val)]
+                        test_forecast = val_test_forecast[len(item_val):]
+                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_train['Demand'], model.fittedvalues)
+                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_val['Demand'], val_forecast)
+                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_test['Demand'], test_forecast)
+
                         results[f"SES_{item}"] = {
                             'train': (train_rmse, train_mape, train_mae, train_bias),
                             'val': (val_rmse, val_mape, val_mae, val_bias),
                             'test': (test_rmse, test_mape, test_mae, test_bias)
                         }
-                        # Future forecast
-                        future_forecast = model.forecast(steps=horizon)
+                        
+                        # Step 3: Generate the final future forecast by re-fitting on ALL historical data
+                        final_model_train_data = item_df.asfreq(pd.infer_freq(item_df.index))
+                        final_model = SimpleExpSmoothing(final_model_train_data['Demand']).fit()
+                        future_forecast = final_model.forecast(steps=horizon)
                         future_forecasts[item]['SES'] = future_forecast.tolist()
                     
-                    
-                    elif model_name == 'HWES':
-                        model = ExponentialSmoothing(
-                            item_df['Demand'],
-                            seasonal='add',
-                            seasonal_periods=seasonal_period
-                        ).fit()
-                        # Training performance
-                        train_forecast = model.forecast(steps=len(item_df))
-                        train_rmse, train_mape, train_mae, train_bias = calculate_metrics(item_df['Demand'].values, train_forecast)
-                        # Validation performance
-                        val_forecast = model.forecast(steps=len(item_df))
-                        val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_df['Demand'].values, val_forecast)
-                        # Test performance
-                        test_forecast = model.forecast(steps=len(item_df))
-                        test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_df['Demand'].values, test_forecast)
-                        results[f"HWES_{item}"] = {
-                            'train': (train_rmse, train_mape, train_mae, train_bias),
-                            'val': (val_rmse, val_mape, val_mae, val_bias),
-                            'test': (test_rmse, test_mape, test_mae, test_bias)
-                        }
-                        # Future forecast
-                        future_forecast = model.forecast(steps=horizon)
-                        future_forecasts[item]['HWES'] = future_forecast.tolist()
+                    elif model_name == 'HSES':
+                        try:
+                            print(f"[HWES] {item}: Demand len={len(item_df['Demand'])}, train={len(item_train)}, val={len(item_val)}, test={len(item_test)}, seasonal_period={seasonal_period}")
+                            
+                            # Fit on train set
+                            freq = pd.infer_freq(item_train.index) or 'D'
+                            train_series = item_train['Demand'].asfreq(freq)
+                            model = ExponentialSmoothing(
+                                train_series,
+                                seasonal='add',
+                                seasonal_periods=seasonal_period
+                            ).fit()
+                            
+                            # In-sample fit (train)
+                            train_pred = model.fittedvalues
+                            train_rmse, train_mape, train_mae, train_bias = calculate_metrics(train_series.values, train_pred.values)
+                            
+                            # Forecast val+test
+                            n_valtest = len(item_val) + len(item_test)
+                            valtest_forecast = model.forecast(steps=n_valtest)
+                            val_forecast = valtest_forecast[:len(item_val)]
+                            test_forecast = valtest_forecast[len(item_val):]
+                            
+                            val_rmse, val_mape, val_mae, val_bias = calculate_metrics(item_val['Demand'].values, val_forecast)
+                            test_rmse, test_mape, test_mae, test_bias = calculate_metrics(item_test['Demand'].values, test_forecast)
+                            
+                            results[f"HWES_{item}"] = {
+                                'train': (train_rmse, train_mape, train_mae, train_bias),
+                                'val': (val_rmse, val_mape, val_mae, val_bias),
+                                'test': (test_rmse, test_mape, test_mae, test_bias)
+                            }
+                            
+                            # Final model on all data, for future
+                            full_series = item_df['Demand'].asfreq(freq)
+                            final_model = ExponentialSmoothing(
+                                full_series,
+                                seasonal='add',
+                                seasonal_periods=seasonal_period
+                            ).fit()
+                            future_forecast = final_model.forecast(steps=horizon)
+                            future_forecasts[item]['HWES'] = future_forecast.tolist()
+                            print(f"[HWES] {item}: Successfully forecast {horizon} future steps")
+                        except Exception as e:
+                            print(f"[HWES] {item} failed: {e}")
+                            results[f"HWES_{item}"] = str(e)
                     
                     elif model_name == 'Prophet':
                         prophet_df = item_df.reset_index().rename(columns={'Date': 'ds', 'Demand': 'y'})
@@ -1575,81 +1613,47 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
         # AR Model
         if 'AR' in selected_models:
             try:
-                model = AutoReg(df_copy['Demand'], lags=2).fit()
-                # Training performance
-                train_forecast = model.predict(start=0, end=len(df_copy)-1)
-                train_rmse, train_mape, train_mae, train_bias = calculate_metrics(df_copy['Demand'].values, train_forecast)
-                # Validation performance
-                val_forecast = model.predict(start=len(df_copy), end=len(df_copy)+len(df_copy)-1)
-                val_rmse, val_mape, val_mae, val_bias = calculate_metrics(df_copy['Demand'].values, val_forecast)
-                # Test performance
-                test_forecast = model.predict(start=len(df_copy), end=len(df_copy)+len(df_copy)-1)
-                test_rmse, test_mape, test_mae, test_bias = calculate_metrics(df_copy['Demand'].values, test_forecast)
+                model = AutoReg(train['Demand'], lags=2).fit()
+                val_forecast = model.predict(start=len(train), end=len(train) + len(val) - 1)
+                test_forecast = model.predict(start=len(train) + len(val), end=len(train) + len(val) + len(test) - 1)
                 results['AR'] = {
-                    'train': (train_rmse, train_mape, train_mae, train_bias),
-                    'val': (val_rmse, val_mape, val_mae, val_bias),
-                    'test': (test_rmse, test_mape, test_mae, train_bias)
+                    'train': calculate_metrics(train['Demand'], model.predict(start=0, end=len(train)-1)),
+                    'val': calculate_metrics(val['Demand'], val_forecast),
+                    'test': calculate_metrics(test['Demand'], test_forecast)
                 }
-                # Future forecast
-                future_forecast = model.predict(start=len(df_copy), end=len(df_copy)+horizon-1)  # Use horizon instead of 29
-                future_forecasts['AR'] = future_forecast.tolist()
+                final_model = AutoReg(df_copy['Demand'], lags=2).fit()
+                future_forecasts['AR'] = final_model.predict(start=len(df_copy), end=len(df_copy) + horizon - 1).tolist()
             except Exception as e:
                 results['AR'] = str(e)
 
         # ARMA Model
         if 'ARMA' in selected_models:
             try:
-                model = ARIMA(df_copy['Demand'], order=(2, 0, 1)).fit()
-                # Training performance
-                train_forecast = model.predict(start=0, end=len(df_copy)-1)
-                train_rmse, train_mape, train_mae, train_bias = calculate_metrics(df_copy['Demand'].values, train_forecast)
-                # Validation performance
-                val_forecast = model.predict(start=len(df_copy), end=len(df_copy)+len(df_copy)-1)
-                val_rmse, val_mape, val_mae, val_bias = calculate_metrics(df_copy['Demand'].values, val_forecast)
-                # Test performance
-                test_forecast = model.predict(start=len(df_copy), end=len(df_copy)+len(df_copy)-1)
-                test_rmse, test_mape, test_mae, test_bias = calculate_metrics(df_copy['Demand'].values, test_forecast)
+                model = ARIMA(train['Demand'], order=(2, 0, 1)).fit()
+                val_forecast = model.predict(start=len(train), end=len(train) + len(val) - 1)
+                test_forecast = model.predict(start=len(train) + len(val), end=len(train) + len(val) + len(test) - 1)
                 results['ARMA'] = {
-                    'train': (train_rmse, train_mape, train_mae, train_bias),
-                    'val': (val_rmse, val_mape, val_mae, val_bias),
-                    'test': (test_rmse, test_mape, test_mae, test_bias)
+                    'train': calculate_metrics(train['Demand'], model.predict(start=0, end=len(train)-1)),
+                    'val': calculate_metrics(val['Demand'], val_forecast),
+                    'test': calculate_metrics(test['Demand'], test_forecast)
                 }
-                # Future forecast
-                future_forecast = model.predict(start=len(df_copy), end=len(df_copy)+len(df_copy)-1)  # Use horizon instead of 29
-                future_forecasts['ARMA'] = future_forecast.tolist()
+                final_model = ARIMA(df_copy['Demand'], order=(2, 0, 1)).fit()
+                future_forecasts['ARMA'] = final_model.predict(start=len(df_copy), end=len(df_copy) + horizon - 1).tolist()
             except Exception as e:
                 results['ARMA'] = str(e)
 
         # SARIMA Model
         if 'SARIMA' in selected_models:
             try:
-                # Build the SARIMA model using auto_arima without unsupported parameters
-                model = auto_tune_sarima(df_copy, seasonal_period)
-            
-                # Training performance: Predict in-sample values for the training period
-                train_forecast = model.predict_in_sample()
-                train_rmse, train_mape, train_mae, train_bias = calculate_metrics(df_copy['Demand'].values, train_forecast)
-            
-                # Validation performance: Forecast for the validation period
-                val_forecast = model.predict(n_periods=len(df_copy))
-                val_rmse, val_mape, val_mae, val_bias = calculate_metrics(df_copy['Demand'].values, val_forecast)
-            
-                # Test performance: Forecast for the test period
-                test_forecast = model.predict(n_periods=len(df_copy))
-                test_rmse, test_mape, test_mae, test_bias = calculate_metrics(df_copy['Demand'].values, test_forecast)
-            
-                # Store the computed metrics
+                model = auto_tune_sarima(train['Demand'], seasonal_period)
+                val_test_forecast = model.predict(n_periods=len(val) + len(test))
                 results['SARIMA'] = {
-                    'train': (train_rmse, train_mape, train_mae, train_bias),
-                    'val': (val_rmse, val_mape, val_mae, val_bias),
-                    'test': (test_rmse, test_mape, test_mae, test_bias)
+                    'train': calculate_metrics(train['Demand'], model.predict_in_sample()),
+                    'val': calculate_metrics(val['Demand'], val_test_forecast[:len(val)]),
+                    'test': calculate_metrics(test['Demand'], val_test_forecast[len(val):])
                 }
-            
-                # Future forecast: Generate forecasts for the next horizon time periods
-                future_forecast = model.predict(n_periods=horizon)
-                future_forecasts['SARIMA'] = future_forecast.tolist()
-            
-            
+                final_model = auto_tune_sarima(df_copy['Demand'], seasonal_period)
+                future_forecasts['SARIMA'] = final_model.predict(n_periods=horizon).tolist()
             except Exception as e:
                 results['SARIMA'] = str(e)
 
@@ -1688,7 +1692,7 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
         if 'VARMAX' in selected_models and len(additional_cols) > 0:
             try:
                 # Prepare multivariate training data
-                train_vars = df_copy[['Demand'] + [col + '_mapped' for col in additional_cols]]
+                train_vars = train[['Demand'] + [col + '_mapped' for col in additional_cols]]
                 model = VARMAX(train_vars, order=(1, 1)).fit(disp=False)
             
                 # Training performance
@@ -1718,54 +1722,49 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
         # Simple Exponential Smoothing (SES)
         if 'SES' in selected_models:
             try:
-                model = SimpleExpSmoothing(df_copy['Demand']).fit()
-                # Training performance
-                train_forecast = model.forecast(steps=len(df_copy))
-                train_rmse, train_mape, train_mae, train_bias = calculate_metrics(df_copy['Demand'].values, train_forecast)
-                # Validation performance
-                val_forecast = model.forecast(steps=len(df_copy))
-                val_rmse, val_mape, val_mae, val_bias = calculate_metrics(df_copy['Demand'].values, val_forecast)
-                # Test performance
-                test_forecast = model.forecast(steps=len(df_copy))
-                test_rmse, test_mape, test_mae, test_bias = calculate_metrics(df_copy['Demand'].values, test_forecast)
+                freq = pd.infer_freq(train.index)
+                train_resampled = train.asfreq(freq) # Ensure frequency is set
+                model = SimpleExpSmoothing(train_resampled['Demand']).fit()
+
+                train_rmse, train_mape, train_mae, train_bias = calculate_metrics(train['Demand'], model.fittedvalues)
+
+                val_test_forecast = model.forecast(steps=len(val) + len(test))
+                val_forecast = val_test_forecast[:len(val)]
+                test_forecast = val_test_forecast[len(val):]
+                
+                val_rmse, val_mape, val_mae, val_bias = calculate_metrics(val['Demand'], val_forecast)
+                test_rmse, test_mape, test_mae, test_bias = calculate_metrics(test['Demand'], test_forecast)
+
                 results['SES'] = {
-                    'train': ( train_rmse, train_mape, train_mae, train_bias),
+                    'train': (train_rmse, train_mape, train_mae, train_bias),
                     'val': (val_rmse, val_mape, val_mae, val_bias),
                     'test': (test_rmse, test_mape, test_mae, test_bias)
                 }
-                # Future forecast
-                future_forecast = model.forecast(steps=horizon)
+                
+                final_model_train_data = df_copy.asfreq(pd.infer_freq(df_copy.index))
+                final_model = SimpleExpSmoothing(final_model_train_data['Demand']).fit()
+                future_forecast = final_model.forecast(steps=horizon)
                 future_forecasts['SES'] = future_forecast.tolist()
             except Exception as e:
                 logging.warning(f"SES model failed: {e}")
-                results['SES'] = {'train': (0, 0, 0, 0), 'val': (float('inf'), 0, 0, 0), 'test': (0, 0, 0, 0)}  # Default to poor val RMSE
+                results['SES'] = {'train': (0, 0, 0, 0), 'val': (float('inf'), 0, 0, 0), 'test': (0, 0, 0, 0)}
                 future_forecasts['SES'] = [0] * horizon
 
         # Holt-Winters Exponential Smoothing (HWES)
         if 'HWES' in selected_models:
             try:
-                model = ExponentialSmoothing(
-                    df_copy['Demand'],
-                    seasonal='add',
-                    seasonal_periods=seasonal_period
-                ).fit()
-                # Training performance
-                train_forecast = model.forecast(steps=len(df_copy))
-                train_rmse, train_mape, train_mae, train_bias = calculate_metrics(df_copy['Demand'].values, train_forecast)
-                # Validation performance
-                val_forecast = model.forecast(steps=len(df_copy))
-                val_rmse, val_mape, val_mae, val_bias = calculate_metrics(df_copy['Demand'].values, val_forecast)
-                # Test performance
-                test_forecast = model.forecast(steps=len(df_copy))
-                test_rmse, test_mape, test_mae, test_bias = calculate_metrics(df_copy['Demand'].values, test_forecast)
+                freq = pd.infer_freq(train.index)
+                train_resampled = train.asfreq(freq)
+                model = ExponentialSmoothing(train_resampled['Demand'], seasonal='add', seasonal_periods=seasonal_period).fit()
+                val_test_forecast = model.forecast(steps=len(val) + len(test))
                 results['HWES'] = {
-                    'train': ( train_rmse, train_mape, train_mae, train_bias),
-                    'val': (val_rmse, val_mape, val_mae, val_bias),
-                    'test': (test_rmse, test_mape, test_mae, test_bias)
+                    'train': calculate_metrics(train['Demand'], model.fittedvalues),
+                    'val': calculate_metrics(val['Demand'], val_test_forecast[:len(val)]),
+                    'test': calculate_metrics(test['Demand'], val_test_forecast[len(val):])
                 }
-                # Future forecast
-                future_forecast = model.forecast(steps=horizon)
-                future_forecasts['HWES'] = future_forecast.tolist()
+                final_model_train_data = df_copy.asfreq(pd.infer_freq(df_copy.index))
+                final_model = ExponentialSmoothing(final_model_train_data['Demand'], seasonal='add', seasonal_periods=seasonal_period).fit()
+                future_forecasts['HWES'] = final_model.forecast(steps=horizon).tolist()
             except Exception as e:
                 results['HWES'] = str(e)
 
@@ -1883,46 +1882,13 @@ def forecast_models(df, selected_models, additional_cols=None, item_col=None, fo
                             'Uncertainty': gp_metrics['uncertainties']
                         })
                         logging.info(f"Gaussian Process uncertainties:\n{uncertainty_df}")
-                        
-                        # Plot predictions with uncertainty bands
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=uncertainty_df['Date'],
-                            y=uncertainty_df['Prediction'],
-                            mode='lines',
-                            name='Prediction',
-                            line=dict(color='blue')
-                        ))
-                        fig.add_trace(go.Scatter(
-                            x=uncertainty_df['Date'],
-                            y=uncertainty_df['Prediction'] + 2*uncertainty_df['Uncertainty'],
-                            mode='lines',
-                            name='Upper Bound (95%)',
-                            line=dict(width=0),
-                            showlegend=False
-                        ))
-                        fig.add_trace(go.Scatter(
-                            x=uncertainty_df['Date'],
-                            y=uncertainty_df['Prediction'] - 2*uncertainty_df['Uncertainty'],
-                            mode='lines',
-                            name='Lower Bound (95%)',
-                            fill='tonexty',
-                            line=dict(width=0)
-                        ))
-                        fig.update_layout(
-                            title='Gaussian Process Forecast with Uncertainty',
-                            xaxis_title='Date',
-                            yaxis_title='Demand',
-                            hovermode='x'
-                        )
-                        fig.show()
                 else:
                     results['Gaussian Process'] = str(gp_metrics)
             except Exception as e:
                 results['Gaussian Process'] = str(e)
             
 
-    return results, future_forecasts, dates
+    return results, future_forecasts, dates, skipped_items_log
 
 # Function to safely call forecast_models with proper date handling
 def safe_forecast_models(df, selected_models, additional_cols=None, item_col=None, forecast_type='Overall', horizon=30):
@@ -1945,8 +1911,8 @@ def safe_forecast_models(df, selected_models, additional_cols=None, item_col=Non
             # from .app import forecast_models
 
             # Later in your code
-            result = forecast_models(df, selected_models, additional_cols, item_col, forecast_type, horizon)
-            return result  # Explicitly return the result from forecast_models
+            results, future_forecasts, dates, skipped_items_log = forecast_models(df, selected_models, additional_cols, item_col, forecast_type, horizon)
+            return results, future_forecasts, dates, skipped_items_log  # Explicitly return the result from forecast_models
 
         else:
             raise ValueError("DataFrame must have a 'Date' column or DatetimeIndex")
@@ -2403,7 +2369,6 @@ def find_best_fit(results: dict, forecast_type: str, metric: str = "MAE"):
         best_fit_summary = best_fit_per_item
     return best_fit_summary
 
-
 # Running the forecast for the file -> 
 def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, selected_models, time_dependent_variables, time_bucket, forecast_lock, column_mappings):
     """Run forecasting on a file using the specified parameters"""
@@ -2454,6 +2419,10 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         df = pd.read_csv(file_path, low_memory=False)
         print(f"Loaded DataFrame with columns: {df.columns.tolist()}")
         print(f"Using column mappings: {column_mappings}")
+        print(f"--- [DEBUG] START: RUN FORECAST FOR FILE ---")
+        print(f"--- [DEBUG] Initial DataFrame shape: {df.shape}")
+        print(f"--- [DEBUG] User selected Time Bucket: {time_bucket}")
+
         
         # Get the mapped columns from column_mappings
         date_col = column_mappings.get("Date")
@@ -2512,10 +2481,10 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                 
             # Look for alternative date columns
             possible_date_cols = [col for col in df.columns if col.lower().find('date') >= 0 or 
-                                 col.lower().find('time') >= 0 or 
-                                 col.lower().find('day') >= 0 or 
-                                 col.lower().find('month') >= 0 or
-                                 col.lower().find('year') >= 0]
+                                col.lower().find('time') >= 0 or 
+                                col.lower().find('day') >= 0 or 
+                                col.lower().find('month') >= 0 or
+                                col.lower().find('year') >= 0]
             
             if possible_date_cols:
                 print(f"Found potential date columns: {possible_date_cols}")
@@ -2609,11 +2578,11 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
             
             # If there are still NaNs, use forward fill
             if df_temp['Demand'].isna().any():
-                df_temp['Demand'] = df_temp['Demand'].fillna(method='ffill')
+                df_temp['Demand'] = df_temp['Demand'].fillna()
             
             # If there are still NaNs, use backward fill
             if df_temp['Demand'].isna().any():
-                df_temp['Demand'] = df_temp['Demand'].fillna(method='bfill')
+                df_temp['Demand'] = df_temp['Demand'].fillna()
             
             # If there are still NaNs, fill with 0 as last resort
             if df_temp['Demand'].isna().any():
@@ -2626,9 +2595,6 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         neg_count = (df['Demand'] < 0).sum()
         if neg_count > 0:
             print(f"Warning: Demand column contains {neg_count} negative values")
-            # For forecasting, we might want to either:
-            # 1. Replace negatives with 0 (for counts/sales that can't be negative)
-            # 2. Keep as is (for inventory changes, temperature, etc.)
         
         # Convert the granularity to forecast_type
         forecast_type = map_granularity_to_forecast_type(granularity)
@@ -2668,10 +2634,38 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                     df["store_item"] = "default_store_item"
                 item_col = "store_item"
         
-        # Important safety measures to prevent statsmodels errors
-        # Make sure the Date column is the index for time series functions
+        detected_freq = api_infer_frequency(df, date_col='Date')
+        print(f"Detected input data frequency: {detected_freq}")
+
+        # Define frequency hierarchy and map user selection to a code
+        freq_hierarchy = {'D': 1, 'W': 2, 'M': 3, 'Q': 4, 'Y': 5}
+        freq_map = {'Daily': 'D', 'Weekly': 'W', 'Monthly': 'M', 'Quarterly': 'Q', 'Yearly': 'Y'}
+        user_selected_freq_code = freq_map.get(time_bucket)
+
+        detected_level = freq_hierarchy.get(detected_freq, 0)
+        selected_level = freq_hierarchy.get(user_selected_freq_code, 0)
+
+        # Apply logic rules
+        if not selected_level:
+            raise HTTPException(status_code=400, detail=f"Invalid time bucket selected: {time_bucket}")
+
+        if detected_level < selected_level:
+            print(f"Input data is finer-grained ('{detected_freq}'). Aggregating up to '{time_bucket}'...")
+            df = aggregate_data(df, time_bucket, forecast_type, item_col, organization_id='default')
+            print(f"Data successfully aggregated. New shape: {df.shape}")
+
+        elif detected_level == selected_level:
+            
+            print(f"Input data frequency ('{detected_freq}') matches selection ('{time_bucket}'). Skipping aggregation.")
+            
+
+        else:          
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid request: Cannot forecast at a '{time_bucket}' frequency from data that is already aggregated as '{detected_freq}'. Please select a time bucket of '{detected_freq}' or coarser."
+            )
+
         if 'Date' in df.columns:
-            # Convert to datetime again just to be super safe
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
             df = df.dropna(subset=['Date'])  # Remove rows with invalid dates
             
@@ -2683,7 +2677,7 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
                 raise ValueError(f"Not enough valid data points after cleaning. Only {len(df_indexed)} rows remaining.")
             
             # Make a copy to prevent modification warnings
-            df_for_forecast = df_indexed.copy()
+            df_for_forecast = df.set_index('Date').sort_index()
         else:
             raise ValueError("Date column is missing from the DataFrame after preprocessing.")
         
@@ -2691,7 +2685,7 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         print(f"Running forecast models with DataFrame shape: {df_for_forecast.shape}")
         
         # Use our safe wrapper function to ensure proper date handling
-        results, future_forecasts, dates = safe_forecast_models(
+        results, future_forecasts, dates, skipped_items_log = safe_forecast_models(
             df_for_forecast, 
             selected_models,
             additional_cols=time_dependent_variables,
@@ -2699,6 +2693,37 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
             forecast_type=forecast_type,
             horizon=forecast_horizon
         )
+        
+        final_results = results
+        final_forecasts = future_forecasts
+        
+        if is_best_fit_mode:
+            best_fit_summary = find_best_fit(results, forecast_type)
+            logging.info(f"Best fit models determined: {best_fit_summary}")
+            
+            filtered_results = {}
+            filtered_forecasts = {}
+            
+            if forecast_type == "Overall":
+                best_model = best_fit_summary.get("best_model")
+                if best_model and best_model in results:
+                    filtered_results[best_model] = results[best_model]
+                if best_model and best_model in future_forecasts:
+                    filtered_forecasts[best_model] = future_forecasts[best_model]
+            
+            else: # For Item-wise or Store-Item Combination
+                for item, summary in best_fit_summary.items():
+                    best_model = summary.get("best_model")
+                    if not best_model: continue                   
+                    result_key = f"{best_model}_{item}"
+                    if result_key in results:
+                        filtered_results[result_key] = results[result_key]
+                    
+                    if item in future_forecasts and best_model in future_forecasts.get(item, {}):
+                        filtered_forecasts[item] = {best_model: future_forecasts[item][best_model]}
+            
+            final_results = filtered_results
+            final_forecasts = filtered_forecasts
         
         # Convert dates to serializable format if needed
         if isinstance(dates, pd.Series) or isinstance(dates, pd.DatetimeIndex):
@@ -2709,10 +2734,11 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         # Make all results JSON-serializable
         response_data = {
             "status": "success",
-            "results": make_json_serializable(results),
-            "future_forecasts": adapt_forecast_structure(future_forecasts, forecast_type, selected_models, results, is_best_fit=is_best_fit_mode),
+            "results": make_json_serializable(final_results),
+            "future_forecasts": adapt_forecast_structure(final_forecasts, forecast_type, selected_models, final_results, is_best_fit=is_best_fit_mode),
             "dates": make_json_serializable(dates_list),
             "forecast_type": forecast_type,  # Include the forecast type in the response
+            "skipped_items": skipped_items_log,
             "config": {
                 "granularity": granularity,
                 "forecast_horizon": forecast_horizon,
@@ -2731,14 +2757,20 @@ def run_forecast_for_file(conn, file_path, granularity, forecast_horizon, select
         #Forecasts for UI and db
         forecast_records =[]
         try:
+            # --- GENERATE FUTURE DATES WITH THE CORRECT FREQUENCY --- #
+            freq_map = {'Daily': 'D', 'Weekly': 'W', 'Monthly': 'M', 'Quarterly': 'Q', 'Yearly': 'Y'} 
+            forecast_freq = freq_map.get(time_bucket, 'D') 
+            print(f"Generating future dates with frequency: '{forecast_freq}' based on time bucket: '{time_bucket}'") 
+            
+            
             if dates_list:
                 last_date = pd.to_datetime(dates_list[-1])
-                freq = api_infer_frequency(df, date_col='Date')
-                future_dates_pd = pd.date_range(start = last_date, periods=forecast_horizon +1, freq=freq)[1:]
+                future_dates_pd = pd.date_range(start=last_date, periods=forecast_horizon + 1, freq=forecast_freq)[1:]
                 future_dates = [d.strftime('%Y-%m-%d') for d in future_dates_pd]
                 
             else:
-                future_dates = [f"Future_{i+1}" for i in range(forecast_horizon)]
+                future_dates_pd = pd.date_range(start=pd.Timestamp.now(), periods=forecast_horizon, freq=forecast_freq)
+                future_dates = [d.strftime('%Y-%m-%d') for d in future_dates_pd] 
                 
             
             # passing the run_type label, Transforms the forcast result into clean list of dictionary
